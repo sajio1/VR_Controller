@@ -152,6 +152,8 @@ public class IronManHUD : MonoBehaviour
         Invoke(nameof(CreateProxyHands), 0.5f);
     }
 
+    private bool _layersExcluded = false;
+    
     private void Update()
     {
         UpdateHUDPosition();
@@ -161,6 +163,13 @@ public class IronManHUD : MonoBehaviour
         UpdatePulsingEffects();
         UpdateFPS();
         UpdateProxyCameras();  // 让相机跟随手腕
+        
+        // 持续确保主相机排除 Proxy Layer（VR 相机可能动态变化）
+        if (!_layersExcluded && (_leftProxy != null || _rightProxy != null))
+        {
+            ExcludeProxyLayersFromMainCamera();
+            _layersExcluded = true;
+        }
     }
 
     private void OnDestroy()
@@ -548,7 +557,34 @@ public class IronManHUD : MonoBehaviour
     /// </summary>
     private void ExcludeProxyLayersFromMainCamera()
     {
-        // 找到主相机（OVRCameraRig 的 CenterEyeAnchor）
+        // 方法1：通过 OVRCameraRig 找相机
+        if (teleopManager != null && teleopManager.CameraRig != null)
+        {
+            var rig = teleopManager.CameraRig;
+            Camera leftEye = rig.leftEyeAnchor?.GetComponent<Camera>();
+            Camera rightEye = rig.rightEyeAnchor?.GetComponent<Camera>();
+            Camera centerEye = rig.centerEyeAnchor?.GetComponent<Camera>();
+            
+            int excludeMask = ~((1 << LAYER_HAND_UI_LEFT) | (1 << LAYER_HAND_UI_RIGHT));
+            
+            if (leftEye != null)
+            {
+                leftEye.cullingMask &= excludeMask;
+                Debug.Log($"[IronManHUD] Excluded proxy layers from: {leftEye.name}");
+            }
+            if (rightEye != null)
+            {
+                rightEye.cullingMask &= excludeMask;
+                Debug.Log($"[IronManHUD] Excluded proxy layers from: {rightEye.name}");
+            }
+            if (centerEye != null)
+            {
+                centerEye.cullingMask &= excludeMask;
+                Debug.Log($"[IronManHUD] Excluded proxy layers from: {centerEye.name}");
+            }
+        }
+        
+        // 方法2：遍历所有相机作为备用
         Camera[] allCameras = Camera.allCameras;
         foreach (var cam in allCameras)
         {
@@ -559,6 +595,15 @@ public class IronManHUD : MonoBehaviour
             cam.cullingMask &= ~(1 << LAYER_HAND_UI_LEFT);
             cam.cullingMask &= ~(1 << LAYER_HAND_UI_RIGHT);
             Debug.Log($"[IronManHUD] Excluded proxy layers from camera: {cam.name}");
+        }
+        
+        // 方法3：找 Main Camera tag
+        Camera mainCam = Camera.main;
+        if (mainCam != null && mainCam != _leftHandCam && mainCam != _rightHandCam)
+        {
+            mainCam.cullingMask &= ~(1 << LAYER_HAND_UI_LEFT);
+            mainCam.cullingMask &= ~(1 << LAYER_HAND_UI_RIGHT);
+            Debug.Log($"[IronManHUD] Excluded proxy layers from Main Camera: {mainCam.name}");
         }
     }
 
