@@ -594,26 +594,19 @@ public class IronManHUD : MonoBehaviour
         mat.name = isLeft ? "LeftProxyHand_Mat" : "RightProxyHand_Mat";
 
         // 内部填充色 - 深蓝半透明
-        Color handColor = new Color(0.02f, 0.08f, 0.2f, 0.2f);
+        Color handColor = new Color(0.02f, 0.06f, 0.15f, 0.15f);
         if (mat.HasProperty("_BaseColor"))
             mat.SetColor("_BaseColor", handColor);
         else if (mat.HasProperty("_Color"))
             mat.SetColor("_Color", handColor);
 
-        // Fresnel 边缘发光
-        if (mat.HasProperty("_FresnelPower"))
+        // 边缘发光设置
+        if (mat.HasProperty("_EdgeColor"))
         {
-            mat.SetFloat("_FresnelPower", 1.5f);
-            mat.SetFloat("_RimIntensity", 2.0f);
-            mat.SetColor("_FresnelColor", new Color(0f, 1f, 1f, 1f));
-        }
-
-        // 轮廓线设置 - 发光青色描边
-        if (mat.HasProperty("_OutlineColor"))
-        {
-            mat.SetColor("_OutlineColor", new Color(0f, 1f, 1f, 1f)); // 亮青色
-            mat.SetFloat("_OutlineWidth", 0.003f);  // 轮廓线宽度
-            mat.SetFloat("_OutlineGlow", 2.5f);     // 发光强度
+            mat.SetColor("_EdgeColor", new Color(0f, 1f, 1f, 1f)); // 亮青色边缘
+            mat.SetFloat("_EdgePower", 1.5f);      // 边缘衰减
+            mat.SetFloat("_EdgeIntensity", 4.0f);  // 发光强度
+            mat.SetFloat("_EdgeWidth", 0.5f);      // 边缘宽度
         }
 
         // 设置渲染队列为透明
