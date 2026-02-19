@@ -160,6 +160,7 @@ public class IronManHUD : MonoBehaviour
         UpdateScanLineAnimation();
         UpdatePulsingEffects();
         UpdateFPS();
+        UpdateProxyCameras();  // 让相机跟随手腕
     }
 
     private void OnDestroy()
@@ -640,6 +641,32 @@ public class IronManHUD : MonoBehaviour
         else _rightHandCam = cam;
 
         Debug.Log($"[IronManHUD] {side} proxy camera created, culling mask: {cam.cullingMask}");
+    }
+
+    /// <summary>
+    /// 让代理相机跟随手腕位置，实现"手在 UI 中相对固定"的效果
+    /// </summary>
+    private void UpdateProxyCameras()
+    {
+        // 左手相机跟随左手腕
+        if (_leftHandCam != null && _leftProxy != null && _leftProxy.IsInitialized && _leftProxy.WristBone != null)
+        {
+            Transform wrist = _leftProxy.WristBone;
+            // 相机位置：手腕正上方偏后
+            _leftHandCam.transform.position = wrist.position + wrist.up * 0.12f + wrist.forward * -0.15f;
+            // 相机朝向手腕
+            _leftHandCam.transform.LookAt(wrist.position, Vector3.up);
+        }
+
+        // 右手相机跟随右手腕
+        if (_rightHandCam != null && _rightProxy != null && _rightProxy.IsInitialized && _rightProxy.WristBone != null)
+        {
+            Transform wrist = _rightProxy.WristBone;
+            // 相机位置：手腕正上方偏后
+            _rightHandCam.transform.position = wrist.position + wrist.up * 0.12f + wrist.forward * -0.15f;
+            // 相机朝向手腕
+            _rightHandCam.transform.LookAt(wrist.position, Vector3.up);
+        }
     }
 
     // ══════════════════════════════════════════════════

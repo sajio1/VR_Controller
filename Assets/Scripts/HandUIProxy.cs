@@ -1,19 +1,13 @@
 using UnityEngine;
-using System.Collections.Generic;
 
 /// <summary>
-/// 代理手姿态同步脚本 (Proxy Skeleton Mirroring)
+/// 代理手渲染脚本 (方案 A：直接引用源骨骼)
 /// 
 /// 功能：
 ///   - 等待真实手的 OVRSkeleton 初始化完成
-///   - 运行时克隆骨骼层级结构（不包含 OVR 组件）
-///   - 复制 SkinnedMeshRenderer 的 Mesh 和绑定姿态
-///   - 每帧只同步骨骼的 localRotation，保持位置固定
-/// 
-/// 使用方法：
-///   1. 将此脚本挂载到一个空 GameObject 上
-///   2. 在 Inspector 中设置 sourceSkeleton（真实手的 OVRSkeleton）
-///   3. 代理手会自动创建并同步姿态
+///   - 创建一个新的 SkinnedMeshRenderer，直接使用源骨骼的 Transform
+///   - 骨骼绑定保证正确，手部 Mesh 正确变形
+///   - 通过专用相机跟随手腕来实现 UI 中的"位置相对固定"效果
 /// </summary>
 public class HandUIProxy : MonoBehaviour
 {
@@ -25,15 +19,9 @@ public class HandUIProxy : MonoBehaviour
     [Tooltip("真实手的 OVRSkeleton 组件")]
     [SerializeField] private OVRSkeleton sourceSkeleton;
 
-    [Tooltip("真实手的 OVRMesh 组件（可选，如果不设置会自动查找）")]
-    [SerializeField] private OVRMesh sourceMesh;
-
     [Header("外观设置")]
-    [Tooltip("代理手使用的材质（可选，不设置则使用默认半透明材质）")]
+    [Tooltip("代理手使用的材质")]
     [SerializeField] private Material proxyMaterial;
-
-    [Tooltip("代理手的缩放比例")]
-    [SerializeField] private float proxyScale = 1.0f;
 
     [Tooltip("代理手的 Layer（用于渲染隔离）")]
     [SerializeField] private int proxyLayer = 6;
@@ -43,10 +31,10 @@ public class HandUIProxy : MonoBehaviour
     // ══════════════════════════════════════════════════
 
     private bool _initialized;
-    private Transform _proxyRoot;
-    private Transform[] _proxyBones;
+    private GameObject _proxyMeshObj;
     private SkinnedMeshRenderer _proxyMeshRenderer;
-    private Dictionary<int, int> _boneIdToIndex;
+    private SkinnedMeshRenderer _sourceSMR;
+    private Transform _wristBone;
 
     // ══════════════════════════════════════════════════
     //                  公共属性
@@ -55,24 +43,23 @@ public class HandUIProxy : MonoBehaviour
     /// <summary>代理手是否已初始化完成</summary>
     public bool IsInitialized => _initialized;
 
-    /// <summary>代理手的根 Transform</summary>
-    public Transform ProxyRoot => _proxyRoot;
-
     /// <summary>代理手的 SkinnedMeshRenderer</summary>
     public SkinnedMeshRenderer ProxyMeshRenderer => _proxyMeshRenderer;
+
+    /// <summary>手腕骨骼的 Transform（用于相机跟随）</summary>
+    public Transform WristBone => _wristBone;
 
     // ══════════════════════════════════════════════════
     //                  公共方法
     // ══════════════════════════════════════════════════
 
     /// <summary>
-    /// 运行时设置数据源（从代码调用时使用）
+    /// 运行时设置数据源
     /// </summary>
     public void SetSource(OVRSkeleton skeleton, OVRMesh mesh = null)
     {
         sourceSkeleton = skeleton;
-        sourceMesh = mesh;
-        _initialized = false; // 重新初始化
+        _initialized = false;
     }
 
     /// <summary>
@@ -81,9 +68,9 @@ public class HandUIProxy : MonoBehaviour
     public void SetLayer(int layer)
     {
         proxyLayer = layer;
-        if (_proxyRoot != null)
+        if (_proxyMeshObj != null)
         {
-            SetLayerRecursive(_proxyRoot.gameObject, layer);
+            _proxyMeshObj.layer = layer;
         }
     }
 
@@ -109,25 +96,18 @@ public class HandUIProxy : MonoBehaviour
         if (sourceSkeleton == null || !sourceSkeleton.IsInitialized)
             return;
 
-        // 首次初始化：克隆骨骼结构
+        // 首次初始化
         if (!_initialized)
         {
             InitializeProxy();
-        }
-
-        // 同步骨骼旋转
-        if (_initialized && _proxyBones != null)
-        {
-            SyncBoneRotations();
         }
     }
 
     private void OnDestroy()
     {
-        // 清理代理手
-        if (_proxyRoot != null)
+        if (_proxyMeshObj != null)
         {
-            Destroy(_proxyRoot.gameObject);
+            Destroy(_proxyMeshObj);
         }
     }
 
@@ -137,198 +117,115 @@ public class HandUIProxy : MonoBehaviour
 
     private void InitializeProxy()
     {
-        if (sourceSkeleton == null || !sourceSkeleton.IsInitialized)
+        // 查找源 SkinnedMeshRenderer
+        _sourceSMR = FindSourceSkinnedMeshRenderer();
+        if (_sourceSMR == null || _sourceSMR.sharedMesh == null)
         {
-            Debug.LogWarning("[HandUIProxy] Source skeleton not ready");
+            Debug.LogWarning("[HandUIProxy] Source SkinnedMeshRenderer not found, retrying...");
             return;
         }
 
-        var srcBones = sourceSkeleton.Bones;
-        if (srcBones == null || srcBones.Count == 0)
-        {
-            Debug.LogWarning("[HandUIProxy] Source skeleton has no bones");
-            return;
-        }
+        Debug.Log($"[HandUIProxy] Found source SMR: {_sourceSMR.name}, mesh: {_sourceSMR.sharedMesh.name}, bones: {_sourceSMR.bones.Length}");
 
-        Debug.Log($"[HandUIProxy] Initializing proxy with {srcBones.Count} bones");
+        // 查找手腕骨骼
+        FindWristBone();
 
-        // 1. 创建代理手根节点
-        CreateProxyRoot();
-
-        // 2. 克隆骨骼层级
-        CloneSkeletonHierarchy();
-
-        // 3. 设置 SkinnedMeshRenderer
-        SetupMeshRenderer();
-
-        // 4. 设置 Layer
-        SetLayerRecursive(_proxyRoot.gameObject, proxyLayer);
+        // 创建代理 Mesh 对象
+        CreateProxyMesh();
 
         _initialized = true;
-        Debug.Log($"[HandUIProxy] Proxy initialized successfully");
+        Debug.Log("[HandUIProxy] Proxy initialized successfully!");
     }
 
-    private void CreateProxyRoot()
+    private SkinnedMeshRenderer FindSourceSkinnedMeshRenderer()
     {
-        // 创建代理手容器
-        GameObject rootObj = new GameObject("ProxyHand");
-        rootObj.transform.SetParent(transform, false);
-        rootObj.transform.localPosition = Vector3.zero;
-        rootObj.transform.localRotation = Quaternion.identity;
-        rootObj.transform.localScale = Vector3.one * proxyScale;
-        _proxyRoot = rootObj.transform;
+        if (sourceSkeleton == null) return null;
+
+        // 在 OVRSkeleton 同级或子级查找
+        SkinnedMeshRenderer smr = sourceSkeleton.GetComponent<SkinnedMeshRenderer>();
+        if (smr != null && smr.sharedMesh != null) return smr;
+
+        smr = sourceSkeleton.GetComponentInChildren<SkinnedMeshRenderer>();
+        if (smr != null && smr.sharedMesh != null) return smr;
+
+        // 在父级查找
+        smr = sourceSkeleton.GetComponentInParent<SkinnedMeshRenderer>();
+        if (smr != null && smr.sharedMesh != null) return smr;
+
+        // 在同一个 GameObject 层级的兄弟节点查找
+        if (sourceSkeleton.transform.parent != null)
+        {
+            foreach (Transform sibling in sourceSkeleton.transform.parent)
+            {
+                smr = sibling.GetComponent<SkinnedMeshRenderer>();
+                if (smr != null && smr.sharedMesh != null) return smr;
+                
+                smr = sibling.GetComponentInChildren<SkinnedMeshRenderer>();
+                if (smr != null && smr.sharedMesh != null) return smr;
+            }
+        }
+
+        return null;
     }
 
-    private void CloneSkeletonHierarchy()
+    private void FindWristBone()
     {
-        var srcBones = sourceSkeleton.Bones;
-        int boneCount = srcBones.Count;
+        if (sourceSkeleton == null || sourceSkeleton.Bones == null) return;
 
-        _proxyBones = new Transform[boneCount];
-        _boneIdToIndex = new Dictionary<int, int>();
-
-        // 第一遍：创建所有骨骼 Transform
-        for (int i = 0; i < boneCount; i++)
+        foreach (var bone in sourceSkeleton.Bones)
         {
-            var srcBone = srcBones[i];
-            GameObject boneObj = new GameObject(srcBone.Transform.name);
-            _proxyBones[i] = boneObj.transform;
-            _boneIdToIndex[(int)srcBone.Id] = i;
+            if (bone.Id == OVRSkeleton.BoneId.Hand_WristRoot)
+            {
+                _wristBone = bone.Transform;
+                Debug.Log($"[HandUIProxy] Found wrist bone: {_wristBone.name}");
+                return;
+            }
         }
 
-        // 第二遍：建立父子关系
-        for (int i = 0; i < boneCount; i++)
+        // Fallback: 用第一个骨骼
+        if (sourceSkeleton.Bones.Count > 0)
         {
-            var srcBone = srcBones[i];
-            int parentIndex = srcBone.ParentBoneIndex;
-
-            if (parentIndex >= 0 && parentIndex < boneCount)
-            {
-                _proxyBones[i].SetParent(_proxyBones[parentIndex], false);
-            }
-            else
-            {
-                // 根骨骼，挂到代理手根节点下
-                _proxyBones[i].SetParent(_proxyRoot, false);
-            }
-
-            // 复制初始 localPosition 和 localRotation
-            _proxyBones[i].localPosition = srcBone.Transform.localPosition;
-            _proxyBones[i].localRotation = srcBone.Transform.localRotation;
-            _proxyBones[i].localScale = srcBone.Transform.localScale;
+            _wristBone = sourceSkeleton.Bones[0].Transform;
+            Debug.Log($"[HandUIProxy] Using first bone as wrist: {_wristBone.name}");
         }
     }
 
-    private void SetupMeshRenderer()
+    private void CreateProxyMesh()
     {
-        // 查找源 Mesh
-        if (sourceMesh == null && sourceSkeleton != null)
-        {
-            sourceMesh = sourceSkeleton.GetComponent<OVRMesh>();
-            if (sourceMesh == null)
-            {
-                sourceMesh = sourceSkeleton.GetComponentInParent<OVRMesh>();
-            }
-            if (sourceMesh == null)
-            {
-                sourceMesh = sourceSkeleton.GetComponentInChildren<OVRMesh>();
-            }
-        }
+        // 创建代理 Mesh 对象
+        _proxyMeshObj = new GameObject("ProxyHandMesh");
+        _proxyMeshObj.transform.SetParent(transform, false);
+        _proxyMeshObj.layer = proxyLayer;
 
-        // 查找源 SkinnedMeshRenderer
-        SkinnedMeshRenderer srcSMR = null;
-        if (sourceSkeleton != null)
-        {
-            srcSMR = sourceSkeleton.GetComponent<SkinnedMeshRenderer>();
-            if (srcSMR == null)
-            {
-                srcSMR = sourceSkeleton.GetComponentInChildren<SkinnedMeshRenderer>();
-            }
-            if (srcSMR == null)
-            {
-                srcSMR = sourceSkeleton.GetComponentInParent<SkinnedMeshRenderer>();
-            }
-        }
-
-        if (srcSMR == null || srcSMR.sharedMesh == null)
-        {
-            Debug.LogWarning("[HandUIProxy] Could not find source SkinnedMeshRenderer with mesh");
-            return;
-        }
-
-        Mesh srcMesh = srcSMR.sharedMesh;
-        Debug.Log($"[HandUIProxy] Found source mesh: {srcMesh.name}, vertices: {srcMesh.vertexCount}");
-
-        // 创建 SkinnedMeshRenderer
-        GameObject meshObj = new GameObject("ProxyMesh");
-        meshObj.transform.SetParent(_proxyRoot, false);
-        meshObj.transform.localPosition = Vector3.zero;
-        meshObj.transform.localRotation = Quaternion.identity;
-        meshObj.transform.localScale = Vector3.one;
-
-        _proxyMeshRenderer = meshObj.AddComponent<SkinnedMeshRenderer>();
-
-        // 复制 Mesh
-        _proxyMeshRenderer.sharedMesh = srcMesh;
+        // 添加 SkinnedMeshRenderer
+        _proxyMeshRenderer = _proxyMeshObj.AddComponent<SkinnedMeshRenderer>();
 
         // ═══════════════════════════════════════════════════════════
-        // 骨骼绑定 - 使用索引对应，不用名字查找
-        // OVRMeshRenderer 按 OVRSkeleton.Bones 的顺序索引绑定
-        // srcSMR.bones.Length 通常是 19（skinnable bones，不含指尖）
-        // _proxyBones.Length 通常是 24（含 5 个指尖 Tip）
+        // 关键：直接复制源 SMR 的所有设置，包括骨骼引用
+        // 这样骨骼绑定保证正确，手部会跟随真实手变形
         // ═══════════════════════════════════════════════════════════
         
-        int srcBoneCount = srcSMR.bones.Length;
-        Transform[] bones = new Transform[srcBoneCount];
-
-        Debug.Log($"[HandUIProxy] Binding bones: srcSMR.bones={srcBoneCount}, proxyBones={_proxyBones.Length}");
-
-        // 直接按索引一一对应
-        for (int i = 0; i < srcBoneCount; i++)
-        {
-            if (i < _proxyBones.Length && _proxyBones[i] != null)
-            {
-                bones[i] = _proxyBones[i];
-            }
-            else
-            {
-                // fallback: 如果索引超出范围，用根骨骼
-                bones[i] = _proxyBones[0];
-                Debug.LogWarning($"[HandUIProxy] Bone index {i} out of range, using root bone");
-            }
-        }
-
-        _proxyMeshRenderer.bones = bones;
-
-        // 设置 rootBone（第一个骨骼通常是手腕）
-        _proxyMeshRenderer.rootBone = _proxyBones[0];
+        _proxyMeshRenderer.sharedMesh = _sourceSMR.sharedMesh;
+        _proxyMeshRenderer.bones = _sourceSMR.bones;           // 直接引用源骨骼！
+        _proxyMeshRenderer.rootBone = _sourceSMR.rootBone;     // 直接引用源根骨骼！
         
-        // 注意：不需要重新赋值 bindposes，sharedMesh 已经包含正确的 bindposes
-
         // 设置材质
         if (proxyMaterial != null)
         {
             _proxyMeshRenderer.material = proxyMaterial;
         }
-        else if (srcSMR.material != null)
+        else
         {
-            // 创建一个半透明版本的材质
-            Material mat = new Material(srcSMR.material);
+            // 复制源材质并调整
+            Material mat = new Material(_sourceSMR.material);
             mat.name = "ProxyHand_Material";
             
-            // 尝试设置为半透明
+            // 尝试设置为半透明青色
+            Color handColor = new Color(0.3f, 0.8f, 1f, 0.7f);
             if (mat.HasProperty("_BaseColor"))
-            {
-                Color c = mat.GetColor("_BaseColor");
-                c.a = 0.6f;
-                mat.SetColor("_BaseColor", c);
-            }
+                mat.SetColor("_BaseColor", handColor);
             else if (mat.HasProperty("_Color"))
-            {
-                Color c = mat.GetColor("_Color");
-                c.a = 0.6f;
-                mat.SetColor("_Color", c);
-            }
+                mat.SetColor("_Color", handColor);
             
             _proxyMeshRenderer.material = mat;
         }
@@ -337,52 +234,6 @@ public class HandUIProxy : MonoBehaviour
         _proxyMeshRenderer.enabled = true;
         _proxyMeshRenderer.updateWhenOffscreen = true;
 
-        Debug.Log($"[HandUIProxy] Mesh renderer setup complete, bones: {bones.Length}");
-    }
-
-    private Transform FindProxyBoneByName(string name)
-    {
-        if (_proxyBones == null) return null;
-        foreach (var bone in _proxyBones)
-        {
-            if (bone != null && bone.name == name)
-                return bone;
-        }
-        return null;
-    }
-
-    // ══════════════════════════════════════════════════
-    //                  同步更新
-    // ══════════════════════════════════════════════════
-
-    private void SyncBoneRotations()
-    {
-        var srcBones = sourceSkeleton.Bones;
-        if (srcBones == null) return;
-
-        int count = Mathf.Min(_proxyBones.Length, srcBones.Count);
-
-        for (int i = 0; i < count; i++)
-        {
-            if (_proxyBones[i] != null && srcBones[i].Transform != null)
-            {
-                // 只同步局部旋转，保持位置不变
-                _proxyBones[i].localRotation = srcBones[i].Transform.localRotation;
-            }
-        }
-    }
-
-    // ══════════════════════════════════════════════════
-    //                  工具方法
-    // ══════════════════════════════════════════════════
-
-    private void SetLayerRecursive(GameObject obj, int layer)
-    {
-        obj.layer = layer;
-        foreach (Transform child in obj.transform)
-        {
-            SetLayerRecursive(child.gameObject, layer);
-        }
+        Debug.Log($"[HandUIProxy] Proxy mesh created, bones: {_proxyMeshRenderer.bones.Length}, layer: {proxyLayer}");
     }
 }
-
