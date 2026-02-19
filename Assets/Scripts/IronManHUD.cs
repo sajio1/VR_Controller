@@ -593,18 +593,18 @@ public class IronManHUD : MonoBehaviour
         Material mat = new Material(shader);
         mat.name = isLeft ? "LeftProxyHand_Mat" : "RightProxyHand_Mat";
 
-        // 设置颜色
-        Color handColor = new Color(0.3f, 0.8f, 1f, 0.5f); // 青色半透明
+        // 设置颜色 - 内部深色半透明，让边缘更突出
+        Color handColor = new Color(0.05f, 0.15f, 0.3f, 0.25f); // 深蓝色，更透明
         if (mat.HasProperty("_BaseColor"))
             mat.SetColor("_BaseColor", handColor);
         else if (mat.HasProperty("_Color"))
             mat.SetColor("_Color", handColor);
 
-        // PerEyeHand 特有属性
+        // 增强 Fresnel 边缘发光
         if (mat.HasProperty("_FresnelPower"))
         {
-            mat.SetFloat("_FresnelPower", 2.5f);
-            mat.SetColor("_FresnelColor", new Color(0f, 1f, 1f, 0.9f));
+            mat.SetFloat("_FresnelPower", 1.2f);  // 降低 = 边缘光更宽
+            mat.SetColor("_FresnelColor", new Color(0f, 1f, 1f, 1f)); // 亮青色边缘
         }
 
         // 设置渲染队列为透明
