@@ -525,10 +525,11 @@ public class IronManHUD : MonoBehaviour
         _rightHandRT.Create();
 
         // 绑定 RenderTexture 到 RawImage
+        // 交换：左手渲染结果显示在右侧面板，右手显示在左侧面板（修复镜像问题）
         if (_leftHandRawImage != null)
-            _leftHandRawImage.texture = _leftHandRT;
+            _leftHandRawImage.texture = _rightHandRT;  // 左侧面板显示右手
         if (_rightHandRawImage != null)
-            _rightHandRawImage.texture = _rightHandRT;
+            _rightHandRawImage.texture = _leftHandRT;  // 右侧面板显示左手
 
         // 创建左手 Proxy
         CreateSingleProxyHand(true, handController);
@@ -627,7 +628,7 @@ public class IronManHUD : MonoBehaviour
         cam.backgroundColor = new Color(0f, 0f, 0f, 0f); // 透明背景
         cam.cullingMask = 1 << layer; // 只渲染对应 Layer
         cam.orthographic = true;
-        cam.orthographicSize = 0.25f;  // 增大视野，手部约 0.15-0.2m，留点余量
+        cam.orthographicSize = 0.17f;  // 缩小视野 = 放大手部约 1.5 倍
         cam.nearClipPlane = 0.01f;
         cam.farClipPlane = 2f;
         cam.targetTexture = rt;
