@@ -624,13 +624,13 @@ public class IronManHUD : MonoBehaviour
         litMat.EnableKeyword("_ALPHAPREMULTIPLY_ON");
         litMat.renderQueue = 3000;
 
-        // 基础颜色 - 青色半透明
-        Color baseColor = new Color(0.1f, 0.6f, 0.8f, 0.4f);
+        // 基础颜色 - 更亮的青色
+        Color baseColor = new Color(0.2f, 0.8f, 1f, 0.5f);
         litMat.SetColor("_BaseColor", baseColor);
         
-        // 发光 (Emission) - 亮青色边缘效果
+        // 发光 (Emission) - 强烈的青色发光
         litMat.EnableKeyword("_EMISSION");
-        litMat.SetColor("_EmissionColor", new Color(0f, 0.8f, 1f, 1f) * 2f); // HDR 发光
+        litMat.SetColor("_EmissionColor", new Color(0f, 1f, 1f, 1f) * 5f); // 更强的 HDR 发光
         litMat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.None;
 
         // 光滑度和金属度
@@ -655,7 +655,7 @@ public class IronManHUD : MonoBehaviour
         cam.backgroundColor = new Color(0f, 0f, 0f, 0f); // 透明背景
         cam.cullingMask = 1 << layer; // 只渲染对应 Layer
         cam.orthographic = true;
-        cam.orthographicSize = 0.17f;  // 缩小视野 = 放大手部约 1.5 倍
+        cam.orthographicSize = 0.11f;  // 进一步缩小视野 = 手部再大 1.5 倍
         cam.nearClipPlane = 0.01f;
         cam.farClipPlane = 2f;
         cam.targetTexture = rt;
