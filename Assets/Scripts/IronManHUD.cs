@@ -580,39 +580,64 @@ public class IronManHUD : MonoBehaviour
     {
         // 尝试使用 PerEyeHand shader
         Shader shader = Shader.Find("Custom/PerEyeHand");
+        
+        if (shader != null)
+        {
+            Debug.Log($"[IronManHUD] Found Custom/PerEyeHand shader");
+            Material mat = new Material(shader);
+            mat.name = isLeft ? "LeftProxyHand_Mat" : "RightProxyHand_Mat";
+            
+            // 内部填充色
+            mat.SetColor("_BaseColor", new Color(0.02f, 0.06f, 0.15f, 0.15f));
+            // 边缘发光
+            mat.SetColor("_EdgeColor", new Color(0f, 1f, 1f, 1f));
+            mat.SetFloat("_EdgePower", 1.5f);
+            mat.SetFloat("_EdgeIntensity", 4.0f);
+            mat.SetFloat("_EdgeWidth", 0.5f);
+            mat.renderQueue = 3000;
+            return mat;
+        }
+        
+        // Fallback: 使用 URP Lit shader（支持 Emission 发光）
+        Debug.LogWarning("[IronManHUD] Custom/PerEyeHand not found, using URP Lit with emission");
+        shader = Shader.Find("Universal Render Pipeline/Lit");
         if (shader == null)
         {
-            // 退回到标准 Unlit
-            shader = Shader.Find("Universal Render Pipeline/Unlit");
+            shader = Shader.Find("Universal Render Pipeline/Simple Lit");
         }
         if (shader == null)
         {
-            shader = Shader.Find("Unlit/Color");
+            Debug.LogError("[IronManHUD] No suitable shader found!");
+            shader = Shader.Find("Standard");
         }
 
-        Material mat = new Material(shader);
-        mat.name = isLeft ? "LeftProxyHand_Mat" : "RightProxyHand_Mat";
+        Material litMat = new Material(shader);
+        litMat.name = isLeft ? "LeftProxyHand_Lit" : "RightProxyHand_Lit";
 
-        // 内部填充色 - 深蓝半透明
-        Color handColor = new Color(0.02f, 0.06f, 0.15f, 0.15f);
-        if (mat.HasProperty("_BaseColor"))
-            mat.SetColor("_BaseColor", handColor);
-        else if (mat.HasProperty("_Color"))
-            mat.SetColor("_Color", handColor);
+        // 设置为透明模式
+        litMat.SetFloat("_Surface", 1); // 1 = Transparent
+        litMat.SetFloat("_Blend", 0);   // 0 = Alpha
+        litMat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+        litMat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+        litMat.SetInt("_ZWrite", 0);
+        litMat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        litMat.EnableKeyword("_ALPHAPREMULTIPLY_ON");
+        litMat.renderQueue = 3000;
 
-        // 边缘发光设置
-        if (mat.HasProperty("_EdgeColor"))
-        {
-            mat.SetColor("_EdgeColor", new Color(0f, 1f, 1f, 1f)); // 亮青色边缘
-            mat.SetFloat("_EdgePower", 1.5f);      // 边缘衰减
-            mat.SetFloat("_EdgeIntensity", 4.0f);  // 发光强度
-            mat.SetFloat("_EdgeWidth", 0.5f);      // 边缘宽度
-        }
+        // 基础颜色 - 青色半透明
+        Color baseColor = new Color(0.1f, 0.6f, 0.8f, 0.4f);
+        litMat.SetColor("_BaseColor", baseColor);
+        
+        // 发光 (Emission) - 亮青色边缘效果
+        litMat.EnableKeyword("_EMISSION");
+        litMat.SetColor("_EmissionColor", new Color(0f, 0.8f, 1f, 1f) * 2f); // HDR 发光
+        litMat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.None;
 
-        // 设置渲染队列为透明
-        mat.renderQueue = 3000;
+        // 光滑度和金属度
+        litMat.SetFloat("_Smoothness", 0.9f);
+        litMat.SetFloat("_Metallic", 0.3f);
 
-        return mat;
+        return litMat;
     }
 
     private void CreateProxyCamera(bool isLeft, Transform proxyContainer, RenderTexture rt, int layer)
