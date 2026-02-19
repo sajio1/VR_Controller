@@ -391,6 +391,31 @@ public class HandTrackingController : MonoBehaviour
         return isRightHand ? rightOvrSkeleton : leftOvrSkeleton;
     }
 
+    /// <summary>获取指定手的 OVRHand 引用（高级用途）</summary>
+    public OVRHand GetHand(bool isRightHand)
+    {
+        return isRightHand ? rightOvrHand : leftOvrHand;
+    }
+
+    /// <summary>获取指定手的 OVRMesh 引用（通过 OVRSkeleton 自动查找）</summary>
+    public OVRMesh GetMesh(bool isRightHand)
+    {
+        OVRSkeleton skeleton = isRightHand ? rightOvrSkeleton : leftOvrSkeleton;
+        if (skeleton == null) return null;
+        
+        // OVRMesh 通常挂在与 OVRSkeleton 相同的 GameObject 上
+        OVRMesh mesh = skeleton.GetComponent<OVRMesh>();
+        if (mesh == null)
+        {
+            mesh = skeleton.GetComponentInChildren<OVRMesh>();
+        }
+        if (mesh == null)
+        {
+            mesh = skeleton.GetComponentInParent<OVRMesh>();
+        }
+        return mesh;
+    }
+
     // ──────────────── 右手手柄模式更新 ────────────────
 
     private void UpdateRightControllerMode()

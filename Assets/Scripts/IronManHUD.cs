@@ -111,6 +111,33 @@ public class IronManHUD : MonoBehaviour
     private Material _rightEyeMat;
 
     // ══════════════════════════════════════════════════
+    //             Proxy Hand Rendering
+    // ══════════════════════════════════════════════════
+
+    // Proxy Hand 组件
+    private HandUIProxy _leftProxy;
+    private HandUIProxy _rightProxy;
+
+    // Proxy Hand 专用相机
+    private Camera _leftHandCam;
+    private Camera _rightHandCam;
+
+    // RenderTexture
+    private RenderTexture _leftHandRT;
+    private RenderTexture _rightHandRT;
+
+    // UI 显示
+    private RawImage _leftHandRawImage;
+    private RawImage _rightHandRawImage;
+
+    // Layer 设置
+    private const int LAYER_HAND_UI_LEFT = 6;   // 需要在 Unity 中手动添加
+    private const int LAYER_HAND_UI_RIGHT = 7;  // 需要在 Unity 中手动添加
+
+    // RenderTexture 尺寸
+    private const int HAND_RT_SIZE = 512;
+
+    // ══════════════════════════════════════════════════
     //                Unity 生命周期
     // ══════════════════════════════════════════════════
 
@@ -119,9 +146,10 @@ public class IronManHUD : MonoBehaviour
         _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
         BuildHUD();
-        // 移除手部可视化功能
-        // CreateSkeletonVisualizers();
         SetupPerEyeHandMaterials();
+        
+        // 延迟创建 Proxy Hands（等待 OVRSkeleton 初始化）
+        Invoke(nameof(CreateProxyHands), 0.5f);
     }
 
     private void Update()
@@ -138,6 +166,18 @@ public class IronManHUD : MonoBehaviour
     {
         if (_leftEyeMat != null) Destroy(_leftEyeMat);
         if (_rightEyeMat != null) Destroy(_rightEyeMat);
+        
+        // 清理 RenderTexture
+        if (_leftHandRT != null)
+        {
+            _leftHandRT.Release();
+            Destroy(_leftHandRT);
+        }
+        if (_rightHandRT != null)
+        {
+            _rightHandRT.Release();
+            Destroy(_rightHandRT);
+        }
     }
 
     // ══════════════════════════════════════════════════
@@ -251,10 +291,25 @@ public class IronManHUD : MonoBehaviour
         if (isLeft) _leftHandLabel = label;
         else _rightHandLabel = label;
 
-        // ── 骨骼可视化区域（透明，LineRenderer 在后面渲染）──
-        CreatePanel(panelBg.transform, "SkeletonArea",
+        // ── 手部渲染区域 ──
+        Image skeletonArea = CreatePanel(panelBg.transform, "SkeletonArea",
             new Vector2(0.05f, 0.25f), new Vector2(0.95f, 0.85f),
             new Color(0f, 0.5f, 0.8f, 0.05f));
+
+        // 手部 RawImage（用于显示 Proxy Hand 的 RenderTexture）
+        GameObject rawImgObj = new GameObject("HandRawImage");
+        rawImgObj.transform.SetParent(skeletonArea.transform, false);
+        RawImage rawImg = rawImgObj.AddComponent<RawImage>();
+        rawImg.color = Color.white;
+        rawImg.raycastTarget = false;
+        RectTransform rawRT = rawImg.rectTransform;
+        rawRT.anchorMin = Vector2.zero;
+        rawRT.anchorMax = Vector2.one;
+        rawRT.offsetMin = Vector2.zero;
+        rawRT.offsetMax = Vector2.zero;
+
+        if (isLeft) _leftHandRawImage = rawImg;
+        else _rightHandRawImage = rawImg;
 
         // 骨骼区域十字准星
         CreatePanel(panelBg.transform, "CrossH",
@@ -442,12 +497,148 @@ public class IronManHUD : MonoBehaviour
     }
 
     // ══════════════════════════════════════════════════
-    //         手部可视化（已移除，保持面板简洁）
+    //              Proxy Hand 系统
     // ══════════════════════════════════════════════════
 
-    private void CreateSkeletonVisualizers()
+    /// <summary>
+    /// 创建代理手渲染系统
+    /// </summary>
+    private void CreateProxyHands()
     {
-        // 功能已移除
+        if (teleopManager == null || teleopManager.HandController == null)
+        {
+            Debug.LogWarning("[IronManHUD] TeleopManager or HandController not available, retrying...");
+            Invoke(nameof(CreateProxyHands), 0.5f);
+            return;
+        }
+
+        var handController = teleopManager.HandController;
+
+        // 创建 RenderTextures
+        _leftHandRT = new RenderTexture(HAND_RT_SIZE, HAND_RT_SIZE, 16, RenderTextureFormat.ARGB32);
+        _leftHandRT.name = "LeftHandRT";
+        _leftHandRT.Create();
+
+        _rightHandRT = new RenderTexture(HAND_RT_SIZE, HAND_RT_SIZE, 16, RenderTextureFormat.ARGB32);
+        _rightHandRT.name = "RightHandRT";
+        _rightHandRT.Create();
+
+        // 绑定 RenderTexture 到 RawImage
+        if (_leftHandRawImage != null)
+            _leftHandRawImage.texture = _leftHandRT;
+        if (_rightHandRawImage != null)
+            _rightHandRawImage.texture = _rightHandRT;
+
+        // 创建左手 Proxy
+        CreateSingleProxyHand(true, handController);
+
+        // 创建右手 Proxy
+        CreateSingleProxyHand(false, handController);
+
+        Debug.Log("[IronManHUD] Proxy hand system initialized");
+    }
+
+    private void CreateSingleProxyHand(bool isLeft, HandTrackingController handController)
+    {
+        string side = isLeft ? "Left" : "Right";
+        int layer = isLeft ? LAYER_HAND_UI_LEFT : LAYER_HAND_UI_RIGHT;
+        RenderTexture rt = isLeft ? _leftHandRT : _rightHandRT;
+
+        // 获取源骨骼
+        OVRSkeleton sourceSkeleton = handController.GetSkeleton(isLeft);
+        if (sourceSkeleton == null)
+        {
+            Debug.LogWarning($"[IronManHUD] {side} OVRSkeleton not found");
+            return;
+        }
+
+        // 创建 Proxy 容器
+        GameObject proxyContainer = new GameObject($"{side}HandProxyContainer");
+        proxyContainer.transform.SetParent(transform, false);
+        proxyContainer.transform.localPosition = new Vector3(isLeft ? -2f : 2f, 0f, 5f);
+        proxyContainer.transform.localRotation = Quaternion.Euler(0f, isLeft ? 45f : -45f, 0f);
+
+        // 添加 HandUIProxy 组件
+        HandUIProxy proxy = proxyContainer.AddComponent<HandUIProxy>();
+        proxy.SetSource(sourceSkeleton, handController.GetMesh(isLeft));
+        proxy.SetLayer(layer);
+
+        // 创建材质（半透明全息效果）
+        Material proxyMat = CreateProxyHandMaterial(isLeft);
+        proxy.SetMaterial(proxyMat);
+
+        if (isLeft) _leftProxy = proxy;
+        else _rightProxy = proxy;
+
+        // 创建专用相机
+        CreateProxyCamera(isLeft, proxyContainer.transform, rt, layer);
+    }
+
+    private Material CreateProxyHandMaterial(bool isLeft)
+    {
+        // 尝试使用 PerEyeHand shader
+        Shader shader = Shader.Find("Custom/PerEyeHand");
+        if (shader == null)
+        {
+            // 退回到标准 Unlit
+            shader = Shader.Find("Universal Render Pipeline/Unlit");
+        }
+        if (shader == null)
+        {
+            shader = Shader.Find("Unlit/Color");
+        }
+
+        Material mat = new Material(shader);
+        mat.name = isLeft ? "LeftProxyHand_Mat" : "RightProxyHand_Mat";
+
+        // 设置颜色
+        Color handColor = new Color(0.3f, 0.8f, 1f, 0.5f); // 青色半透明
+        if (mat.HasProperty("_BaseColor"))
+            mat.SetColor("_BaseColor", handColor);
+        else if (mat.HasProperty("_Color"))
+            mat.SetColor("_Color", handColor);
+
+        // PerEyeHand 特有属性
+        if (mat.HasProperty("_FresnelPower"))
+        {
+            mat.SetFloat("_FresnelPower", 2.5f);
+            mat.SetColor("_FresnelColor", new Color(0f, 1f, 1f, 0.9f));
+        }
+
+        // 设置渲染队列为透明
+        mat.renderQueue = 3000;
+
+        return mat;
+    }
+
+    private void CreateProxyCamera(bool isLeft, Transform proxyContainer, RenderTexture rt, int layer)
+    {
+        string side = isLeft ? "Left" : "Right";
+
+        GameObject camObj = new GameObject($"{side}HandCamera");
+        camObj.transform.SetParent(proxyContainer, false);
+        camObj.transform.localPosition = new Vector3(0f, 0.1f, -0.4f);
+        camObj.transform.localRotation = Quaternion.Euler(15f, 0f, 0f);
+
+        Camera cam = camObj.AddComponent<Camera>();
+        cam.clearFlags = CameraClearFlags.SolidColor;
+        cam.backgroundColor = new Color(0f, 0f, 0f, 0f); // 透明背景
+        cam.cullingMask = 1 << layer; // 只渲染对应 Layer
+        cam.orthographic = true;
+        cam.orthographicSize = 0.15f;
+        cam.nearClipPlane = 0.01f;
+        cam.farClipPlane = 2f;
+        cam.targetTexture = rt;
+        cam.depth = -10; // 比主相机低
+
+        // 禁用音频监听
+        AudioListener listener = camObj.GetComponent<AudioListener>();
+        if (listener != null) Destroy(listener);
+
+        if (isLeft) _leftHandCam = cam;
+        else _rightHandCam = cam;
+
+        Debug.Log($"[IronManHUD] {side} proxy camera created, culling mask: {cam.cullingMask}");
     }
 
     // ══════════════════════════════════════════════════
