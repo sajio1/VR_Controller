@@ -617,15 +617,16 @@ public class IronManHUD : MonoBehaviour
 
         GameObject camObj = new GameObject($"{side}HandCamera");
         camObj.transform.SetParent(proxyContainer, false);
-        camObj.transform.localPosition = new Vector3(0f, 0.1f, -0.4f);
-        camObj.transform.localRotation = Quaternion.Euler(15f, 0f, 0f);
+        // 相机位置：在手的正上方偏后，俯视手部
+        camObj.transform.localPosition = new Vector3(0f, 0.15f, -0.3f);
+        camObj.transform.localRotation = Quaternion.Euler(25f, 0f, 0f);
 
         Camera cam = camObj.AddComponent<Camera>();
         cam.clearFlags = CameraClearFlags.SolidColor;
         cam.backgroundColor = new Color(0f, 0f, 0f, 0f); // 透明背景
         cam.cullingMask = 1 << layer; // 只渲染对应 Layer
         cam.orthographic = true;
-        cam.orthographicSize = 0.15f;
+        cam.orthographicSize = 0.25f;  // 增大视野，手部约 0.15-0.2m，留点余量
         cam.nearClipPlane = 0.01f;
         cam.farClipPlane = 2f;
         cam.targetTexture = rt;

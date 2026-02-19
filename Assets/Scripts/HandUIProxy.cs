@@ -271,41 +271,39 @@ public class HandUIProxy : MonoBehaviour
         // 复制 Mesh
         _proxyMeshRenderer.sharedMesh = srcMesh;
 
-        // 设置骨骼绑定
-        int numSkinnableBones = Mathf.Min(_proxyBones.Length, srcSMR.bones.Length);
-        Transform[] bones = new Transform[srcSMR.bones.Length];
+        // ═══════════════════════════════════════════════════════════
+        // 骨骼绑定 - 使用索引对应，不用名字查找
+        // OVRMeshRenderer 按 OVRSkeleton.Bones 的顺序索引绑定
+        // srcSMR.bones.Length 通常是 19（skinnable bones，不含指尖）
+        // _proxyBones.Length 通常是 24（含 5 个指尖 Tip）
+        // ═══════════════════════════════════════════════════════════
+        
+        int srcBoneCount = srcSMR.bones.Length;
+        Transform[] bones = new Transform[srcBoneCount];
 
-        // 匹配骨骼
-        for (int i = 0; i < srcSMR.bones.Length; i++)
+        Debug.Log($"[HandUIProxy] Binding bones: srcSMR.bones={srcBoneCount}, proxyBones={_proxyBones.Length}");
+
+        // 直接按索引一一对应
+        for (int i = 0; i < srcBoneCount; i++)
         {
-            if (srcSMR.bones[i] != null)
+            if (i < _proxyBones.Length && _proxyBones[i] != null)
             {
-                string boneName = srcSMR.bones[i].name;
-                // 在代理骨骼中查找同名骨骼
-                Transform proxyBone = FindProxyBoneByName(boneName);
-                bones[i] = proxyBone ?? _proxyBones[0]; // fallback to root
+                bones[i] = _proxyBones[i];
             }
             else
             {
+                // fallback: 如果索引超出范围，用根骨骼
                 bones[i] = _proxyBones[0];
+                Debug.LogWarning($"[HandUIProxy] Bone index {i} out of range, using root bone");
             }
         }
 
         _proxyMeshRenderer.bones = bones;
 
-        // 设置 rootBone
-        if (srcSMR.rootBone != null)
-        {
-            Transform proxyRootBone = FindProxyBoneByName(srcSMR.rootBone.name);
-            _proxyMeshRenderer.rootBone = proxyRootBone ?? _proxyBones[0];
-        }
-        else
-        {
-            _proxyMeshRenderer.rootBone = _proxyBones[0];
-        }
-
-        // 复制 bindposes
-        _proxyMeshRenderer.sharedMesh.bindposes = srcMesh.bindposes;
+        // 设置 rootBone（第一个骨骼通常是手腕）
+        _proxyMeshRenderer.rootBone = _proxyBones[0];
+        
+        // 注意：不需要重新赋值 bindposes，sharedMesh 已经包含正确的 bindposes
 
         // 设置材质
         if (proxyMaterial != null)
