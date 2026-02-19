@@ -6,7 +6,7 @@ using UnityEngine;
 /// 职责：协调双手输入采集、Clutch 开关、网络发送、安全限制、校准/归位。
 /// 所有 UI 已迁移至 IronManHUD / SettingsPanel。
 ///
-/// Clutch 现为简单 bool 属性，由 SettingsPanel 或左手中指 Pinch 手势控制。
+/// Clutch 现为简单 bool 属性，由 SettingsPanel 或左手小指 Pinch 手势控制。
 /// </summary>
 public class TeleopManager : MonoBehaviour
 {
@@ -205,7 +205,7 @@ public class TeleopManager : MonoBehaviour
         if (OVRInput.GetDown(OVRInput.Button.Two))
             SendHome();
 
-        // 左手中指+拇指 pinch → 切换 Clutch
+        // 左手小指+拇指 pinch → 切换 Clutch
         UpdateClutchPinchGesture();
     }
 
@@ -217,15 +217,15 @@ public class TeleopManager : MonoBehaviour
     {
         if (handTrackingController == null) return;
 
-        // 获取左手中指 pinch 强度（0-1）
-        float pinchStrength = handTrackingController.LeftMiddlePinchStrength;
+        // 获取左手小指 pinch 强度（0-1）- 小指比中指更不容易误触
+        float pinchStrength = handTrackingController.LeftPinkyPinchStrength;
         bool isPinching = pinchStrength > 0.8f; // 阈值：80%
 
         // 检测从未捏 → 捏（上升沿触发）
         if (isPinching && !_lastPinchState)
         {
             ClutchEngaged = !ClutchEngaged; // 切换
-            Debug.Log($"[TeleopManager] 左手中指 Pinch 切换 Clutch → {(ClutchEngaged ? "ON" : "OFF")}");
+            Debug.Log($"[TeleopManager] 左手小指 Pinch 切换 Clutch → {(ClutchEngaged ? "ON" : "OFF")}");
         }
 
         _lastPinchState = isPinching;

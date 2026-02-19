@@ -89,8 +89,11 @@ public class HandTrackingController : MonoBehaviour
     /// <summary>左手柄是否已连接</summary>
     public bool IsLeftControllerConnected { get; private set; }
 
-    /// <summary>左手中指捏合强度 0~1（用于 Clutch 控制）</summary>
+    /// <summary>左手中指捏合强度 0~1</summary>
     public float LeftMiddlePinchStrength { get; private set; }
+    
+    /// <summary>左手小指捏合强度 0~1（用于 Clutch 控制）</summary>
+    public float LeftPinkyPinchStrength { get; private set; }
 
     /// <summary>右手中指-拇指捏合中点位置（Clutch 进度条定位用）</summary>
     public Vector3 RightPinchMidpoint { get; private set; }
@@ -259,6 +262,7 @@ public class HandTrackingController : MonoBehaviour
             IsLeftInputActive = false;
             IsLeftHandTracking = false;
             LeftMiddlePinchStrength = 0f;
+            LeftPinkyPinchStrength = 0f;
             return;
         }
 
@@ -275,6 +279,7 @@ public class HandTrackingController : MonoBehaviour
         {
             IsLeftInputActive = false;
             LeftMiddlePinchStrength = 0f;
+            LeftPinkyPinchStrength = 0f;
             return;
         }
 
@@ -298,8 +303,11 @@ public class HandTrackingController : MonoBehaviour
         // 食指捏合强度作为夹爪值
         LeftGripperValue = leftOvrHand.GetFingerPinchStrength(OVRHand.HandFinger.Index);
 
-        // 中指捏合强度（Clutch 控制用）
+        // 中指捏合强度
         LeftMiddlePinchStrength = leftOvrHand.GetFingerPinchStrength(OVRHand.HandFinger.Middle);
+        
+        // 小指捏合强度（Clutch 控制用）
+        LeftPinkyPinchStrength = leftOvrHand.GetFingerPinchStrength(OVRHand.HandFinger.Pinky);
 
         // 查找并缓存 pinch 骨骼（thumb tip + middle tip）
         if (!_leftPinchBonesFound || _leftThumbTip == null || _leftMiddleTip == null)
