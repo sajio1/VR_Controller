@@ -68,6 +68,9 @@ public class TeleopManager : MonoBehaviour
             if (_clutchEngaged == value) return;
             _clutchEngaged = value;
 
+            // 播放扫频音效
+            PlayClutchSound(_clutchEngaged);
+
             if (_clutchEngaged)
             {
                 // 接合时自动 re-anchor，避免位置跳变
@@ -155,8 +158,16 @@ public class TeleopManager : MonoBehaviour
     private Quaternion _lastSentLeftRotation = Quaternion.identity;
     private float _lastSentLeftTimestamp;
 
-    // 左手中指 Pinch 手势控制 Clutch
+    // 左手小指 Pinch 手势控制 Clutch
     private bool _lastPinchState;
+    
+    // Clutch 切换音效
+    private AudioSource _audioSource;
+    private AudioClip _clutchOnSound;   // 和弦 ON
+    private AudioClip _clutchOffSound;  // 和弦 OFF
+    private AudioClip _rosConnectSound;  // 上行扫频（ROS 连接）
+    private AudioClip _rosDisconnectSound; // 下行扫频（ROS 断开）
+    private bool _wasRosConnected;  // 跟踪上一次连接状态
 
     // ══════════════════════════════════════════════════
     //              Unity 生命周期
@@ -169,6 +180,204 @@ public class TeleopManager : MonoBehaviour
         // Passthrough 透视
         if (OVRManager.instance != null)
             OVRManager.instance.isInsightPassthroughEnabled = true;
+        
+        // 初始化 Clutch 切换音效
+        InitializeClutchSounds();
+    }
+    
+    /// <summary>
+    /// 初始化所有音效
+    /// </summary>
+    private void InitializeClutchSounds()
+    {
+        // 创建 AudioSource
+        _audioSource = gameObject.AddComponent<AudioSource>();
+        _audioSource.playOnAwake = false;
+        _audioSource.spatialBlend = 0f; // 2D 音效，不受位置影响
+        _audioSource.volume = 0.6f;
+        
+        // Clutch ON: 明亮的大三和弦 C5+E5+G5 (523Hz + 659Hz + 784Hz)
+        _clutchOnSound = GenerateChord(new float[] { 523f, 659f, 784f }, 0.15f, true);
+        
+        // Clutch OFF: 下行的小和弦 A4+C5 (440Hz + 523Hz)
+        _clutchOffSound = GenerateChord(new float[] { 440f, 523f }, 0.12f, false);
+        
+        // ROS 连接: 上行扫频 (科幻感)
+        _rosConnectSound = GenerateSweep(300f, 1000f, 0.2f, true);
+        
+        // ROS 断开: 下行扫频
+        _rosDisconnectSound = GenerateSweep(800f, 300f, 0.25f, false);
+        
+        // 订阅 ROS 连接状态变化
+        if (rosBridge != null)
+        {
+            rosBridge.OnStateChanged += OnRosStateChanged;
+        }
+        
+        Debug.Log("[TeleopManager] 音效系统初始化完成");
+    }
+    
+    /// <summary>
+    /// ROS 连接状态变化回调
+    /// </summary>
+    private void OnRosStateChanged(ROSBridgeConnection.ConnectionState newState)
+    {
+        bool isConnected = (newState == ROSBridgeConnection.ConnectionState.Connected);
+        
+        // 检测状态变化
+        if (isConnected && !_wasRosConnected)
+        {
+            // 刚连接上 → 播放上行扫频
+            PlaySound(_rosConnectSound);
+            Debug.Log("[TeleopManager] 🔊 ROS 连接成功音效");
+        }
+        else if (!isConnected && _wasRosConnected && 
+                 newState != ROSBridgeConnection.ConnectionState.Reconnecting)
+        {
+            // 意外断开（不是正在重连） → 播放下行扫频
+            PlaySound(_rosDisconnectSound);
+            Debug.Log("[TeleopManager] 🔊 ROS 断开音效");
+        }
+        
+        _wasRosConnected = isConnected;
+    }
+    
+    /// <summary>
+    /// 生成扫频音效（用于 ROS 连接状态）
+    /// </summary>
+    private AudioClip GenerateSweep(float startFreq, float endFreq, float duration, bool ascending)
+    {
+        int sampleRate = 44100;
+        int samples = (int)(sampleRate * duration);
+        float[] data = new float[samples];
+        
+        float phase = 0f;
+        float prevFreq = startFreq;
+        
+        for (int i = 0; i < samples; i++)
+        {
+            float t = (float)i / samples;
+            
+            // 指数扫频
+            float freq = startFreq * Mathf.Pow(endFreq / startFreq, t);
+            
+            // 相位累积（平滑过渡，避免杂音）
+            phase += 2f * Mathf.PI * (prevFreq + freq) * 0.5f / sampleRate;
+            prevFreq = freq;
+            
+            // 音量包络
+            float envelope;
+            if (t < 0.08f)
+                envelope = t / 0.08f;
+            else if (t > 0.65f)
+                envelope = (1f - t) / 0.35f;
+            else
+                envelope = 1f;
+            
+            // 基频 + 谐波
+            float fundamental = Mathf.Sin(phase);
+            float harmonic = Mathf.Sin(phase * 2f) * 0.25f;
+            float harmonic2 = Mathf.Sin(phase * 3f) * 0.1f;
+            
+            data[i] = (fundamental + harmonic + harmonic2) * envelope * 0.35f;
+        }
+        
+        AudioClip clip = AudioClip.Create(ascending ? "RosConnect" : "RosDisconnect", samples, 1, sampleRate, false);
+        clip.SetData(data, 0);
+        return clip;
+    }
+    
+    /// <summary>
+    /// 生成和弦音效
+    /// </summary>
+    /// <param name="frequencies">和弦中各音的频率</param>
+    /// <param name="duration">持续时间 秒</param>
+    /// <param name="bright">是否明亮（ON=明亮上扬，OFF=柔和下沉）</param>
+    private AudioClip GenerateChord(float[] frequencies, float duration, bool bright)
+    {
+        int sampleRate = 44100;
+        int samples = (int)(sampleRate * duration);
+        float[] data = new float[samples];
+        
+        for (int i = 0; i < samples; i++)
+        {
+            float t = (float)i / samples;
+            float sample = 0f;
+            
+            // 叠加所有频率
+            for (int f = 0; f < frequencies.Length; f++)
+            {
+                float freq = frequencies[f];
+                float phase = 2f * Mathf.PI * freq * i / sampleRate;
+                
+                // 基频
+                sample += Mathf.Sin(phase);
+                
+                // 添加轻微的二次谐波，让声音更温暖
+                sample += Mathf.Sin(phase * 2f) * 0.15f;
+            }
+            
+            // 归一化
+            sample /= frequencies.Length * 1.15f;
+            
+            // 音量包络：ADSR 简化版
+            float envelope;
+            if (t < 0.05f)
+            {
+                // Attack: 快速上升
+                envelope = t / 0.05f;
+            }
+            else if (t < 0.15f)
+            {
+                // Decay: 轻微下降到 sustain
+                envelope = 1f - (t - 0.05f) / 0.1f * 0.2f;
+            }
+            else if (t > 0.6f)
+            {
+                // Release: 淡出
+                envelope = (1f - t) / 0.4f * 0.8f;
+            }
+            else
+            {
+                // Sustain
+                envelope = 0.8f;
+            }
+            
+            // ON 音效稍亮，OFF 音效稍暗
+            float brightness = bright ? 1.0f : 0.85f;
+            
+            data[i] = sample * envelope * 0.4f * brightness;
+        }
+        
+        AudioClip clip = AudioClip.Create(bright ? "ClutchOn" : "ClutchOff", samples, 1, sampleRate, false);
+        clip.SetData(data, 0);
+        return clip;
+    }
+    
+    /// <summary>
+    /// 播放 Clutch 切换音效
+    /// </summary>
+    private void PlayClutchSound(bool clutchOn)
+    {
+        PlaySound(clutchOn ? _clutchOnSound : _clutchOffSound);
+    }
+    
+    /// <summary>
+    /// 通用音效播放
+    /// </summary>
+    private void PlaySound(AudioClip clip)
+    {
+        if (_audioSource == null || clip == null) return;
+        _audioSource.PlayOneShot(clip);  // 使用 PlayOneShot 允许音效叠加
+    }
+    
+    private void OnDestroy()
+    {
+        // 取消订阅事件
+        if (rosBridge != null)
+        {
+            rosBridge.OnStateChanged -= OnRosStateChanged;
+        }
     }
 
     private void Update()
