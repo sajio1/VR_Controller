@@ -548,8 +548,63 @@ public class IronManHUD : MonoBehaviour
 
         // 关键：让主相机排除 Proxy Hand 的 Layer，防止粉色重影
         ExcludeProxyLayersFromMainCamera();
+        
+        // 禁用原始 SDK 手部渲染（这才是粉色手的来源！）
+        DisableOriginalHandRendering();
 
         Debug.Log("[IronManHUD] Proxy hand system initialized");
+    }
+    
+    /// <summary>
+    /// 禁用 Meta Quest SDK 原始手部渲染器，防止粉色重影
+    /// </summary>
+    private void DisableOriginalHandRendering()
+    {
+        if (teleopManager == null || teleopManager.HandController == null) return;
+        
+        var handController = teleopManager.HandController;
+        
+        // 获取左手的 OVRMesh 并禁用其渲染
+        OVRMesh leftMesh = handController.GetMesh(true);
+        if (leftMesh != null)
+        {
+            // 禁用 OVRMeshRenderer（这是渲染粉色手的组件）
+            var leftMeshRenderer = leftMesh.GetComponent<OVRMeshRenderer>();
+            if (leftMeshRenderer != null)
+            {
+                leftMeshRenderer.enabled = false;
+                Debug.Log("[IronManHUD] Disabled left hand OVRMeshRenderer");
+            }
+            
+            // 也禁用 SkinnedMeshRenderer 以防万一
+            var leftSkinnedRenderer = leftMesh.GetComponent<SkinnedMeshRenderer>();
+            if (leftSkinnedRenderer != null)
+            {
+                leftSkinnedRenderer.enabled = false;
+                Debug.Log("[IronManHUD] Disabled left hand SkinnedMeshRenderer");
+            }
+        }
+        
+        // 获取右手的 OVRMesh 并禁用其渲染
+        OVRMesh rightMesh = handController.GetMesh(false);
+        if (rightMesh != null)
+        {
+            var rightMeshRenderer = rightMesh.GetComponent<OVRMeshRenderer>();
+            if (rightMeshRenderer != null)
+            {
+                rightMeshRenderer.enabled = false;
+                Debug.Log("[IronManHUD] Disabled right hand OVRMeshRenderer");
+            }
+            
+            var rightSkinnedRenderer = rightMesh.GetComponent<SkinnedMeshRenderer>();
+            if (rightSkinnedRenderer != null)
+            {
+                rightSkinnedRenderer.enabled = false;
+                Debug.Log("[IronManHUD] Disabled right hand SkinnedMeshRenderer");
+            }
+        }
+        
+        Debug.Log("[IronManHUD] Original SDK hand rendering disabled");
     }
 
     /// <summary>
