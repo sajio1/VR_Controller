@@ -287,7 +287,7 @@ public class IronManHUD : MonoBehaviour
         Text label = CreateText(headerBg.transform, "Label",
             new Vector2(0.08f, 0f), new Vector2(0.92f, 1f),
             isLeft ? "◁  LEFT HAND" : "RIGHT HAND  ▷",
-            CYAN, 20, isLeft ? TextAnchor.MiddleLeft : TextAnchor.MiddleRight);
+            CYAN, 30, isLeft ? TextAnchor.MiddleLeft : TextAnchor.MiddleRight);  // 字体放大 1.5x
 
         if (isLeft) _leftHandLabel = label;
         else _rightHandLabel = label;
@@ -322,9 +322,9 @@ public class IronManHUD : MonoBehaviour
 
         // ── 数据区 ──
         Text data = CreateText(panelBg.transform, "Data",
-            new Vector2(0.08f, 0.02f), new Vector2(0.92f, 0.23f),
+            new Vector2(0.08f, 0.02f), new Vector2(0.92f, 0.25f),
             "Tracking: ---\nGrip: ---\nMode: ---",
-            WHITE_DIM, 16, TextAnchor.UpperLeft);
+            WHITE_DIM, 24, TextAnchor.UpperLeft);  // 字体放大 1.5x
 
         if (isLeft) _leftHandData = data;
         else _rightHandData = data;
@@ -537,7 +537,29 @@ public class IronManHUD : MonoBehaviour
         // 创建右手 Proxy
         CreateSingleProxyHand(false, handController);
 
+        // 关键：让主相机排除 Proxy Hand 的 Layer，防止粉色重影
+        ExcludeProxyLayersFromMainCamera();
+
         Debug.Log("[IronManHUD] Proxy hand system initialized");
+    }
+
+    /// <summary>
+    /// 让主相机排除 Proxy Hand 的 Layer，防止重影
+    /// </summary>
+    private void ExcludeProxyLayersFromMainCamera()
+    {
+        // 找到主相机（OVRCameraRig 的 CenterEyeAnchor）
+        Camera[] allCameras = Camera.allCameras;
+        foreach (var cam in allCameras)
+        {
+            // 跳过我们自己创建的 Proxy 相机
+            if (cam == _leftHandCam || cam == _rightHandCam) continue;
+            
+            // 排除 Layer 6 和 7
+            cam.cullingMask &= ~(1 << LAYER_HAND_UI_LEFT);
+            cam.cullingMask &= ~(1 << LAYER_HAND_UI_RIGHT);
+            Debug.Log($"[IronManHUD] Excluded proxy layers from camera: {cam.name}");
+        }
     }
 
     private void CreateSingleProxyHand(bool isLeft, HandTrackingController handController)
