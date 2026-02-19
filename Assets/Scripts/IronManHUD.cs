@@ -593,18 +593,27 @@ public class IronManHUD : MonoBehaviour
         Material mat = new Material(shader);
         mat.name = isLeft ? "LeftProxyHand_Mat" : "RightProxyHand_Mat";
 
-        // 设置颜色 - 内部深色半透明，让边缘更突出
-        Color handColor = new Color(0.05f, 0.15f, 0.3f, 0.25f); // 深蓝色，更透明
+        // 内部填充色 - 深蓝半透明
+        Color handColor = new Color(0.02f, 0.08f, 0.2f, 0.2f);
         if (mat.HasProperty("_BaseColor"))
             mat.SetColor("_BaseColor", handColor);
         else if (mat.HasProperty("_Color"))
             mat.SetColor("_Color", handColor);
 
-        // 增强 Fresnel 边缘发光
+        // Fresnel 边缘发光
         if (mat.HasProperty("_FresnelPower"))
         {
-            mat.SetFloat("_FresnelPower", 1.2f);  // 降低 = 边缘光更宽
-            mat.SetColor("_FresnelColor", new Color(0f, 1f, 1f, 1f)); // 亮青色边缘
+            mat.SetFloat("_FresnelPower", 1.5f);
+            mat.SetFloat("_RimIntensity", 2.0f);
+            mat.SetColor("_FresnelColor", new Color(0f, 1f, 1f, 1f));
+        }
+
+        // 轮廓线设置 - 发光青色描边
+        if (mat.HasProperty("_OutlineColor"))
+        {
+            mat.SetColor("_OutlineColor", new Color(0f, 1f, 1f, 1f)); // 亮青色
+            mat.SetFloat("_OutlineWidth", 0.003f);  // 轮廓线宽度
+            mat.SetFloat("_OutlineGlow", 2.5f);     // 发光强度
         }
 
         // 设置渲染队列为透明
