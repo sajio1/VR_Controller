@@ -1,11 +1,12 @@
 using UnityEngine;
 
 /// <summary>
-/// 双手手势追踪 + 手柄控制器双模式输入控制器。
-/// 手势模式：通过 OVRHand/OVRSkeleton 分别获取左右手手腕位姿和食指捏合强度。
-/// 手柄模式：通过 OVRInput 获取左右手柄位姿和扳机值。
-/// 对外暴露统一接口：左/右手的 TargetPosition / TargetRotation / GripperValue / IsInputActive。
+/// [DEPRECATED] Hand-only tracking controller (wrist pose + pinch grip).
+///
+/// Superseded by BodyTrackingManager which provides full-body tracking
+/// via OVRBody (84 joints). Kept for reference only.
 /// </summary>
+[System.Obsolete("Use BodyTrackingManager for full-body tracking")]
 public class HandTrackingController : MonoBehaviour
 {
     // ──────────────── 输入模式 ────────────────

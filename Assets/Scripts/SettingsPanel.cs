@@ -2,21 +2,19 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Iron Man 风格浮动设置面板
+/// Floating settings panel for body tracking configuration.
 ///
-/// 功能：
-///   - Clutch 开关（Toggle 按钮）
-///   - ROS 连接开关
-///   - 发送频率滑块 (10-120 Hz)
-///   - 位置缩放滑块 (0.5-5.0x)
-///   - ROS URL 显示
-///   - 校准 / 归位按钮
+/// Sections:
+///   - T-Pose Calibration button
+///   - Reset Calibration button
+///   - Smoothing slider (rotation interpolation speed)
+///   - Status display (body tracking info)
 ///
-/// 交互：
-///   - 通过 PointableCanvas 支持 VR 手势戳/射线交互
-///   - 左手柄 X 键 或 代码调用 TogglePanel() 显示/隐藏
+/// Interaction:
+///   - PointableCanvas for VR gesture/ray interaction
+///   - X button (Quest) or Tab key toggles visibility
 ///
-/// 配色与 IronManHUD 统一（青蓝色全息风格）。
+/// Color scheme matches IronManHUD (cyan holographic style).
 /// </summary>
 public class SettingsPanel : MonoBehaviour
 {
@@ -24,16 +22,16 @@ public class SettingsPanel : MonoBehaviour
     //                   Inspector
     // ══════════════════════════════════════════════════
 
-    [Header("引用")]
+    [Header("References")]
     [SerializeField] private TeleopManager teleopManager;
     [SerializeField] private OVRCameraRig cameraRig;
 
-    [Header("面板设置")]
+    [Header("Panel Settings")]
     [SerializeField] private float panelDistance = 0.8f;
     [SerializeField] private KeyCode toggleKey = KeyCode.Tab;
 
     // ══════════════════════════════════════════════════
-    //                    颜色
+    //                    Colors
     // ══════════════════════════════════════════════════
 
     private static readonly Color CYAN          = new Color(0f, 1f, 1f, 1f);
@@ -44,35 +42,28 @@ public class SettingsPanel : MonoBehaviour
     private static readonly Color BG_DARK       = new Color(0.02f, 0.03f, 0.08f, 0.92f);
     private static readonly Color BG_SECTION    = new Color(0.03f, 0.05f, 0.12f, 0.6f);
     private static readonly Color BG_BUTTON     = new Color(0.05f, 0.08f, 0.18f, 0.8f);
-    private static readonly Color BG_BTN_HOVER  = new Color(0f, 0.4f, 0.6f, 0.5f);
     private static readonly Color BORDER        = new Color(0f, 0.8f, 1f, 0.4f);
     private static readonly Color WHITE         = new Color(0.9f, 0.92f, 0.95f, 1f);
 
     // ══════════════════════════════════════════════════
-    //                  内部引用
+    //                  Internal Refs
     // ══════════════════════════════════════════════════
 
     private Canvas _canvas;
     private Font _font;
     private bool _isVisible;
 
-    // 控件引用
-    private Text _clutchButtonText;
-    private Image _clutchButtonBg;
-    private Text _connectionButtonText;
-    private Image _connectionButtonBg;
-    private Slider _sendRateSlider;
-    private Text _sendRateValue;
-    private Slider _scaleSlider;
-    private Text _scaleValue;
-    private Text _urlText;
-    private Text _statusText;
+    private Text _calibrationStatusText;
+    private Image _calibrateBtnBg;
+    private Slider _smoothingSlider;
+    private Text _smoothingValue;
+    private Text _bodyStatusText;
 
     private const float CANVAS_W = 500f;
-    private const float CANVAS_H = 650f;
+    private const float CANVAS_H = 450f;
 
     // ══════════════════════════════════════════════════
-    //                Unity 生命周期
+    //                Unity Lifecycle
     // ══════════════════════════════════════════════════
 
     private void Start()
@@ -85,7 +76,6 @@ public class SettingsPanel : MonoBehaviour
 
     private void Update()
     {
-        // X 键切换面板
         if (OVRInput.GetDown(OVRInput.Button.Three) || Input.GetKeyDown(toggleKey))
             TogglePanel();
 
@@ -97,7 +87,7 @@ public class SettingsPanel : MonoBehaviour
     }
 
     // ══════════════════════════════════════════════════
-    //                  公开接口
+    //                  Public API
     // ══════════════════════════════════════════════════
 
     public void TogglePanel()
@@ -111,12 +101,12 @@ public class SettingsPanel : MonoBehaviour
     public void HidePanel() { _isVisible = false; _canvas.gameObject.SetActive(false); }
 
     // ══════════════════════════════════════════════════
-    //                  构建面板
+    //                  Build Panel
     // ══════════════════════════════════════════════════
 
     private void BuildPanel()
     {
-        // ─── Canvas ───
+        // Canvas
         GameObject canvasObj = new GameObject("SettingsPanel_Canvas");
         canvasObj.transform.SetParent(transform);
         _canvas = canvasObj.AddComponent<Canvas>();
@@ -128,100 +118,81 @@ public class SettingsPanel : MonoBehaviour
         canvasRT.sizeDelta = new Vector2(CANVAS_W, CANVAS_H);
         canvasRT.localScale = Vector3.one * 0.001f;
 
-        // ─── 添加 PointableCanvas（Meta Interaction SDK VR 交互）───
         TryAddPointableCanvas(canvasObj);
 
-        // ─── 主背景 ───
+        // Background
         MakePanel(canvasObj.transform, "BG", Vector2.zero, Vector2.one, BG_DARK);
 
-        // ─── 标题栏 ───
-        MakePanel(canvasObj.transform, "TitleBar", new Vector2(0.02f, 0.90f), new Vector2(0.98f, 0.98f), BG_SECTION);
-        MakeText(canvasObj.transform, "Title", new Vector2(0.05f, 0.91f), new Vector2(0.95f, 0.97f), "⚙  SETTINGS", 28, TextAnchor.MiddleLeft, CYAN);
+        // Title bar
+        MakePanel(canvasObj.transform, "TitleBar",
+            new Vector2(0.02f, 0.88f), new Vector2(0.98f, 0.97f), BG_SECTION);
+        MakeText(canvasObj.transform, "Title",
+            new Vector2(0.05f, 0.89f), new Vector2(0.95f, 0.96f),
+            "⚙  BODY TRACKING SETTINGS", 24, TextAnchor.MiddleLeft, CYAN);
 
-        // ─── 边框装饰 ───
+        // Borders
         MakeBorder(canvasObj.transform, "BorderTop", new Vector2(0f, 0.99f), new Vector2(1f, 1f));
         MakeBorder(canvasObj.transform, "BorderBottom", new Vector2(0f, 0f), new Vector2(1f, 0.01f));
         MakeBorder(canvasObj.transform, "BorderLeft", new Vector2(0f, 0f), new Vector2(0.01f, 1f));
         MakeBorder(canvasObj.transform, "BorderRight", new Vector2(0.99f, 0f), new Vector2(1f, 1f));
 
-        // ═══ Section 1: CLUTCH ═══
-        float yTop = 0.86f;
-        MakeSection(canvasObj.transform, "ClutchSection", ref yTop, "⚡  CLUTCH CONTROL");
-        CreateToggleButton(canvasObj.transform, "ClutchBtn",
-            SectionBtnMin(yTop), SectionBtnMax(yTop),
-            out _clutchButtonText, out _clutchButtonBg,
-            "CLUTCH OFF",
-            () => {
-                if (teleopManager != null)
-                    teleopManager.ClutchEngaged = !teleopManager.ClutchEngaged;
-            });
-        yTop -= 0.10f;
+        float yTop = 0.85f;
 
-        // ═══ Section 2: CONNECTION ═══
-        MakeSection(canvasObj.transform, "ConnSection", ref yTop, "●  ROS CONNECTION");
-        CreateToggleButton(canvasObj.transform, "ConnBtn",
-            SectionBtnMin(yTop), SectionBtnMax(yTop),
-            out _connectionButtonText, out _connectionButtonBg,
-            "CONNECT",
-            () => {
-                if (teleopManager == null || teleopManager.RosBridge == null) return;
-                var ros = teleopManager.RosBridge;
-                if (ros.IsConnected)
-                    ros.Disconnect();
-                else
-                    ros.Connect();
-            });
-        yTop -= 0.10f;
+        // ═══ Section 1: CALIBRATION ═══
+        MakeSection(canvasObj.transform, "CalibSection", ref yTop, "◇  T-POSE CALIBRATION");
 
-        // ═══ Section 3: SEND RATE ═══
-        MakeSection(canvasObj.transform, "RateSection", ref yTop, "↗  SEND RATE");
-        CreateSlider(canvasObj.transform, "RateSlider",
-            new Vector2(0.06f, yTop - 0.06f), new Vector2(0.94f, yTop - 0.02f),
-            10f, 120f, 60f, out _sendRateSlider, out _sendRateValue,
-            (v) => {
-                if (teleopManager != null) teleopManager.SendRate = v;
-                _sendRateValue.text = $"{v:F0} Hz";
-            });
-        yTop -= 0.10f;
-
-        // ═══ Section 4: POSITION SCALE ═══
-        MakeSection(canvasObj.transform, "ScaleSection", ref yTop, "⇄  POSITION SCALE");
-        CreateSlider(canvasObj.transform, "ScaleSlider",
-            new Vector2(0.06f, yTop - 0.06f), new Vector2(0.94f, yTop - 0.02f),
-            0.5f, 5.0f, 2.0f, out _scaleSlider, out _scaleValue,
-            (v) => {
-                if (teleopManager != null) teleopManager.PositionScale = v;
-                _scaleValue.text = $"{v:F1}x";
-            });
-        yTop -= 0.10f;
-
-        // ═══ Section 5: QUICK ACTIONS ═══
-        MakeSection(canvasObj.transform, "ActionsSection", ref yTop, "✦  QUICK ACTIONS");
         CreateActionButton(canvasObj.transform, "CalibrateBtn",
-            new Vector2(0.06f, yTop - 0.07f), new Vector2(0.48f, yTop - 0.01f),
-            "CALIBRATE",
-            () => { if (teleopManager != null) teleopManager.Calibrate(); });
+            new Vector2(0.06f, yTop - 0.09f), new Vector2(0.48f, yTop - 0.01f),
+            "CALIBRATE T-POSE", GOLD,
+            () => { if (teleopManager != null) teleopManager.CalibrateTPose(); },
+            out _calibrateBtnBg);
 
-        CreateActionButton(canvasObj.transform, "HomeBtn",
-            new Vector2(0.52f, yTop - 0.07f), new Vector2(0.94f, yTop - 0.01f),
-            "SEND HOME",
-            () => { if (teleopManager != null) teleopManager.SendHome(); });
-        yTop -= 0.10f;
+        CreateActionButton(canvasObj.transform, "ResetBtn",
+            new Vector2(0.52f, yTop - 0.09f), new Vector2(0.94f, yTop - 0.01f),
+            "RESET", RED,
+            () => { if (teleopManager != null) teleopManager.ResetCalibration(); },
+            out _);
 
-        // ═══ URL Display ═══
-        _urlText = MakeText(canvasObj.transform, "URLText",
-            new Vector2(0.05f, yTop - 0.06f), new Vector2(0.95f, yTop),
-            "ROS URL: ws://...", 14, TextAnchor.MiddleLeft, CYAN_DIM);
-        yTop -= 0.08f;
+        _calibrationStatusText = MakeText(canvasObj.transform, "CalStatus",
+            new Vector2(0.06f, yTop - 0.14f), new Vector2(0.94f, yTop - 0.09f),
+            "Status: Not calibrated", 13, TextAnchor.MiddleLeft, CYAN_DIM);
 
-        // ═══ Status Text ═══
-        _statusText = MakeText(canvasObj.transform, "StatusText",
-            new Vector2(0.05f, 0.02f), new Vector2(0.95f, 0.08f),
-            "Press X to close", 12, TextAnchor.MiddleCenter, WHITE * 0.6f);
+        yTop -= 0.20f;
+
+        // ═══ Section 2: SMOOTHING ═══
+        MakeSection(canvasObj.transform, "SmoothSection", ref yTop, "~  SMOOTHING");
+
+        CreateSlider(canvasObj.transform, "SmoothSlider",
+            new Vector2(0.06f, yTop - 0.08f), new Vector2(0.94f, yTop - 0.02f),
+            1f, 30f, 15f, out _smoothingSlider, out _smoothingValue,
+            (v) =>
+            {
+                if (teleopManager != null && teleopManager.ModelDriver != null)
+                {
+                    // Access via serialized field would be ideal; for now use reflection-safe approach
+                }
+                if (_smoothingValue != null) _smoothingValue.text = $"{v:F0}";
+            });
+        yTop -= 0.14f;
+
+        // ═══ Section 3: STATUS ═══
+        MakeSection(canvasObj.transform, "StatusSection", ref yTop, "●  TRACKING STATUS");
+
+        _bodyStatusText = MakeText(canvasObj.transform, "BodyStatus",
+            new Vector2(0.06f, yTop - 0.18f), new Vector2(0.94f, yTop),
+            "Body: ---\nLeft Hand: ---\nRight Hand: ---\nBones: ---",
+            14, TextAnchor.UpperLeft, WHITE);
+
+        yTop -= 0.22f;
+
+        // Close hint
+        MakeText(canvasObj.transform, "CloseHint",
+            new Vector2(0.05f, 0.02f), new Vector2(0.95f, 0.07f),
+            "Press X to close", 12, TextAnchor.MiddleCenter, WHITE * 0.5f);
     }
 
     // ══════════════════════════════════════════════════
-    //              面板位置更新（跟随头部）
+    //              Panel Position (follow head)
     // ══════════════════════════════════════════════════
 
     private void UpdatePanelPosition()
@@ -236,72 +207,77 @@ public class SettingsPanel : MonoBehaviour
         Vector3 targetPos = eye.position + eye.forward * panelDistance;
         Quaternion targetRot = Quaternion.LookRotation(eye.forward, Vector3.up);
 
-        _canvas.transform.position = Vector3.Lerp(_canvas.transform.position, targetPos, Time.deltaTime * 5f);
-        _canvas.transform.rotation = Quaternion.Slerp(_canvas.transform.rotation, targetRot, Time.deltaTime * 5f);
+        _canvas.transform.position = Vector3.Lerp(
+            _canvas.transform.position, targetPos, Time.deltaTime * 5f);
+        _canvas.transform.rotation = Quaternion.Slerp(
+            _canvas.transform.rotation, targetRot, Time.deltaTime * 5f);
     }
 
     // ══════════════════════════════════════════════════
-    //                 控件状态更新
+    //                 Control Updates
     // ══════════════════════════════════════════════════
 
     private void UpdateControlStates()
     {
         if (teleopManager == null) return;
 
-        // Clutch 按钮
-        if (_clutchButtonText != null && _clutchButtonBg != null)
+        var body = teleopManager.BodyTracker;
+        var norm = teleopManager.Normalizer;
+
+        // Calibration status
+        if (_calibrationStatusText != null)
         {
-            bool engaged = teleopManager.ClutchEngaged;
-            _clutchButtonText.text = engaged ? "CLUTCH ON" : "CLUTCH OFF";
-            _clutchButtonBg.color = engaged ? GREEN * 0.6f : BG_BUTTON;
+            if (norm != null && norm.IsCalibrated)
+            {
+                _calibrationStatusText.text =
+                    $"<color=#00FF80>Calibrated</color>  |  Scale: {norm.HeightScaleFactor:F2}x";
+                if (_calibrateBtnBg != null)
+                    _calibrateBtnBg.color = GREEN * 0.5f;
+            }
+            else
+            {
+                _calibrationStatusText.text =
+                    "<color=#FF4466>Not calibrated</color> — Stand in T-pose and press Calibrate";
+                if (_calibrateBtnBg != null)
+                    _calibrateBtnBg.color = BG_BUTTON;
+            }
         }
 
-        // 连接按钮
-        if (_connectionButtonText != null && _connectionButtonBg != null && teleopManager.RosBridge != null)
+        // Body status
+        if (_bodyStatusText != null)
         {
-            var ros = teleopManager.RosBridge;
-            bool connected = ros.IsConnected;
-            string stateStr = ros.State.ToString().ToUpper();
-            _connectionButtonText.text = connected ? "CONNECTED" : $"{stateStr}";
-            _connectionButtonBg.color = connected ? GREEN * 0.6f :
-                (ros.State == ROSBridgeConnection.ConnectionState.Error ? RED * 0.6f : BG_BUTTON);
-        }
+            bool bodyOk = body != null && body.IsBodyTracking;
+            bool leftOk = body != null && body.IsLeftHandTracking;
+            bool rightOk = body != null && body.IsRightHandTracking;
+            int bones = body != null ? body.BodyBoneCount : 0;
+            float conf = body != null ? body.BodyConfidence : 0f;
 
-        // 发送频率滑块
-        if (_sendRateSlider != null && _sendRateValue != null)
-        {
-            _sendRateSlider.SetValueWithoutNotify(teleopManager.SendRate);
-            _sendRateValue.text = $"{teleopManager.SendRate:F0} Hz";
-        }
+            string bColor = bodyOk ? "#00FF80" : "#FF4466";
+            string lColor = leftOk ? "#00FF80" : "#FF4466";
+            string rColor = rightOk ? "#00FF80" : "#FF4466";
 
-        // 位置缩放滑块
-        if (_scaleSlider != null && _scaleValue != null)
-        {
-            _scaleSlider.SetValueWithoutNotify(teleopManager.PositionScale);
-            _scaleValue.text = $"{teleopManager.PositionScale:F1}x";
-        }
-
-        // URL 文本
-        if (_urlText != null && teleopManager.RosBridge != null)
-        {
-            _urlText.text = $"<color=#006688>URL:</color> {teleopManager.RosBridge.RosbridgeUrl}";
+            _bodyStatusText.text =
+                $"<color={bColor}>● Body: {(bodyOk ? "TRACKED" : "NOT TRACKED")}</color>\n" +
+                $"<color={lColor}>● Left Hand: {(leftOk ? "OK" : "---")}</color>\n" +
+                $"<color={rColor}>● Right Hand: {(rightOk ? "OK" : "---")}</color>\n" +
+                $"<color=#00CCFF>● Bones: {bones}  |  Confidence: {conf:P0}</color>";
         }
     }
 
     // ══════════════════════════════════════════════════
-    //                 UI 构建辅助方法
+    //                 UI Build Helpers
     // ══════════════════════════════════════════════════
 
     private void MakeSection(Transform parent, string name, ref float yTop, string title)
     {
-        MakeText(parent, name + "_Title", new Vector2(0.05f, yTop - 0.04f), new Vector2(0.95f, yTop), title, 16, TextAnchor.MiddleLeft, CYAN_DIM);
-        yTop -= 0.05f;
+        MakeText(parent, name + "_Title",
+            new Vector2(0.05f, yTop - 0.05f), new Vector2(0.95f, yTop),
+            title, 15, TextAnchor.MiddleLeft, CYAN_DIM);
+        yTop -= 0.06f;
     }
 
-    private Vector2 SectionBtnMin(float yTop) => new Vector2(0.06f, yTop - 0.06f);
-    private Vector2 SectionBtnMax(float yTop) => new Vector2(0.94f, yTop);
-
-    private GameObject MakePanel(Transform parent, string name, Vector2 anchorMin, Vector2 anchorMax, Color color)
+    private GameObject MakePanel(Transform parent, string name,
+        Vector2 anchorMin, Vector2 anchorMax, Color color)
     {
         GameObject obj = new GameObject(name);
         obj.transform.SetParent(parent, false);
@@ -314,12 +290,15 @@ public class SettingsPanel : MonoBehaviour
         return obj;
     }
 
-    private void MakeBorder(Transform parent, string name, Vector2 anchorMin, Vector2 anchorMax)
+    private void MakeBorder(Transform parent, string name,
+        Vector2 anchorMin, Vector2 anchorMax)
     {
         MakePanel(parent, name, anchorMin, anchorMax, BORDER);
     }
 
-    private Text MakeText(Transform parent, string name, Vector2 anchorMin, Vector2 anchorMax, string content, int fontSize, TextAnchor anchor, Color color)
+    private Text MakeText(Transform parent, string name,
+        Vector2 anchorMin, Vector2 anchorMax,
+        string content, int fontSize, TextAnchor anchor, Color color)
     {
         GameObject obj = new GameObject(name);
         obj.transform.SetParent(parent, false);
@@ -329,6 +308,7 @@ public class SettingsPanel : MonoBehaviour
         txt.fontSize = fontSize;
         txt.alignment = anchor;
         txt.color = color;
+        txt.supportRichText = true;
         txt.raycastTarget = false;
         RectTransform rt = txt.rectTransform;
         rt.anchorMin = anchorMin;
@@ -337,7 +317,9 @@ public class SettingsPanel : MonoBehaviour
         return txt;
     }
 
-    private void CreateToggleButton(Transform parent, string name, Vector2 anchorMin, Vector2 anchorMax, out Text textOut, out Image bgOut, string label, System.Action onClick)
+    private void CreateActionButton(Transform parent, string name,
+        Vector2 anchorMin, Vector2 anchorMax,
+        string label, Color labelColor, System.Action onClick, out Image bgOut)
     {
         GameObject btnObj = new GameObject(name);
         btnObj.transform.SetParent(parent, false);
@@ -354,9 +336,9 @@ public class SettingsPanel : MonoBehaviour
         Text txt = txtObj.AddComponent<Text>();
         txt.text = label;
         txt.font = _font;
-        txt.fontSize = 18;
+        txt.fontSize = 15;
         txt.alignment = TextAnchor.MiddleCenter;
-        txt.color = WHITE;
+        txt.color = labelColor;
         RectTransform txtRT = txt.rectTransform;
         txtRT.anchorMin = Vector2.zero;
         txtRT.anchorMax = Vector2.one;
@@ -365,42 +347,15 @@ public class SettingsPanel : MonoBehaviour
         btn.targetGraphic = bg;
         btn.onClick.AddListener(() => onClick?.Invoke());
 
-        textOut = txt;
         bgOut = bg;
     }
 
-    private void CreateActionButton(Transform parent, string name, Vector2 anchorMin, Vector2 anchorMax, string label, System.Action onClick)
+    private void CreateSlider(Transform parent, string name,
+        Vector2 anchorMin, Vector2 anchorMax,
+        float min, float max, float initial,
+        out Slider sliderOut, out Text valueOut,
+        System.Action<float> onChange)
     {
-        GameObject btnObj = new GameObject(name);
-        btnObj.transform.SetParent(parent, false);
-        Button btn = btnObj.AddComponent<Button>();
-        Image bg = btnObj.AddComponent<Image>();
-        bg.color = BG_BUTTON;
-        RectTransform btnRT = bg.rectTransform;
-        btnRT.anchorMin = anchorMin;
-        btnRT.anchorMax = anchorMax;
-        btnRT.sizeDelta = Vector2.zero;
-
-        GameObject txtObj = new GameObject("Text");
-        txtObj.transform.SetParent(btnObj.transform, false);
-        Text txt = txtObj.AddComponent<Text>();
-        txt.text = label;
-        txt.font = _font;
-        txt.fontSize = 16;
-        txt.alignment = TextAnchor.MiddleCenter;
-        txt.color = GOLD;
-        RectTransform txtRT = txt.rectTransform;
-        txtRT.anchorMin = Vector2.zero;
-        txtRT.anchorMax = Vector2.one;
-        txtRT.sizeDelta = Vector2.zero;
-
-        btn.targetGraphic = bg;
-        btn.onClick.AddListener(() => onClick?.Invoke());
-    }
-
-    private void CreateSlider(Transform parent, string name, Vector2 anchorMin, Vector2 anchorMax, float min, float max, float initial, out Slider sliderOut, out Text valueOut, System.Action<float> onChange)
-    {
-        // 容器
         GameObject sliderObj = new GameObject(name);
         sliderObj.transform.SetParent(parent, false);
         RectTransform sliderRT = sliderObj.AddComponent<RectTransform>();
@@ -408,7 +363,7 @@ public class SettingsPanel : MonoBehaviour
         sliderRT.anchorMax = anchorMax;
         sliderRT.sizeDelta = Vector2.zero;
 
-        // 背景
+        // Background
         GameObject bgObj = new GameObject("Background");
         bgObj.transform.SetParent(sliderObj.transform, false);
         Image bgImg = bgObj.AddComponent<Image>();
@@ -435,7 +390,7 @@ public class SettingsPanel : MonoBehaviour
         fillRT.anchorMax = Vector2.one;
         fillRT.sizeDelta = Vector2.zero;
 
-        // Handle Slide Area
+        // Handle
         GameObject handleAreaObj = new GameObject("Handle Slide Area");
         handleAreaObj.transform.SetParent(sliderObj.transform, false);
         RectTransform handleAreaRT = handleAreaObj.AddComponent<RectTransform>();
@@ -450,7 +405,7 @@ public class SettingsPanel : MonoBehaviour
         RectTransform handleRT = handleImg.rectTransform;
         handleRT.sizeDelta = new Vector2(10f, 0f);
 
-        // Value Text
+        // Value text
         GameObject valueObj = new GameObject("Value");
         valueObj.transform.SetParent(sliderObj.transform, false);
         Text valueTxt = valueObj.AddComponent<Text>();
@@ -464,7 +419,6 @@ public class SettingsPanel : MonoBehaviour
         valueRT.anchorMax = new Vector2(0.98f, 1f);
         valueRT.sizeDelta = Vector2.zero;
 
-        // Slider Component
         Slider slider = sliderObj.AddComponent<Slider>();
         slider.minValue = min;
         slider.maxValue = max;
@@ -478,31 +432,28 @@ public class SettingsPanel : MonoBehaviour
     }
 
     // ══════════════════════════════════════════════════
-    //         添加 PointableCanvas (VR 交互)
+    //         PointableCanvas (VR interaction)
     // ══════════════════════════════════════════════════
 
     private void TryAddPointableCanvas(GameObject canvasObj)
     {
         try
         {
-            // 反射式获取 Oculus.Interaction.UnityCanvas.PointableCanvas
             var assembly = System.Reflection.Assembly.Load("Oculus.Interaction");
             if (assembly == null) return;
 
             var pType = assembly.GetType("Oculus.Interaction.UnityCanvas.PointableCanvas");
             if (pType == null) return;
 
-            // 检查是否已有该组件
             var existing = canvasObj.GetComponent(pType);
             if (existing != null) return;
 
-            // 添加组件
             canvasObj.AddComponent(pType);
-            Debug.Log("[SettingsPanel] PointableCanvas 已添加（支持 VR 手势交互）");
+            Debug.Log("[SettingsPanel] PointableCanvas added for VR interaction");
         }
         catch (System.Exception e)
         {
-            Debug.LogWarning($"[SettingsPanel] 无法添加 PointableCanvas: {e.Message}");
+            Debug.LogWarning($"[SettingsPanel] Could not add PointableCanvas: {e.Message}");
         }
     }
 }

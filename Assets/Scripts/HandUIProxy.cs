@@ -2,19 +2,16 @@ using UnityEngine;
 using System.Collections.Generic;
 
 /// <summary>
-/// 代理手姿态同步脚本 (Proxy Skeleton Mirroring)
+/// [DEPRECATED] Proxy hand skeleton mirroring.
 /// 
-/// 功能：
-///   - 等待真实手的 OVRSkeleton 初始化完成
-///   - 运行时克隆骨骼层级结构（不包含 OVR 组件）
-///   - 复制 SkinnedMeshRenderer 的 Mesh 和绑定姿态
-///   - 每帧只同步骨骼的 localRotation，保持位置固定
-/// 
-/// 使用方法：
-///   1. 将此脚本挂载到一个空 GameObject 上
-///   2. 在 Inspector 中设置 sourceSkeleton（真实手的 OVRSkeleton）
-///   3. 代理手会自动创建并同步姿态
+/// This script is superseded by the full-body tracking system:
+///   - BodyTrackingManager (reads OVRBody data)
+///   - SMPLModelDriver (drives SMPL-H model)
+///   - HumanoidModelViewer (renders model viewports)
+///
+/// Kept for reference only. Not used in the current scene.
 /// </summary>
+[System.Obsolete("Use BodyTrackingManager + SMPLModelDriver instead")]
 public class HandUIProxy : MonoBehaviour
 {
     // ══════════════════════════════════════════════════

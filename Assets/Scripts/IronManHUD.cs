@@ -2,28 +2,28 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Iron Man 风格 HUD — VR 遥操作主界面
+/// SHADOW MODE HUD — Full body tracking visualization interface.
 ///
-/// 布局：
-///   ┌──────────────────────────────────────────────────────┐
-///   │  ◆ STARK TELEOP SYSTEM v2.0            [FPS] [TIME] │
-///   ├────────────┬──────────────────────┬─────────────────┤
-///   │  LEFT HAND │     CAMERA FEED      │   RIGHT HAND    │
-///   │  ┌──────┐  │  ┌────────────────┐  │  ┌───────────┐  │
-///   │  │skel  │  │  │                │  │  │   skel    │  │
-///   │  │viz   │  │  │  [placeholder] │  │  │   viz     │  │
-///   │  └──────┘  │  └────────────────┘  │  └───────────┘  │
-///   │  Grip 0.85 │                      │  Grip 0.92      │
-///   ├────────────┴──────────────────────┴─────────────────┤
-///   │ ● ROS: Connected │ ⚡ Clutch: ON │ 60Hz │ Scale 2x  │
-///   └──────────────────────────────────────────────────────┘
+/// Layout:
+///   ┌──────────────────────────────────────────────────────────┐
+///   │  ◆ SHADOW MODE (Body Tracking)           [FPS] [TIME]    │
+///   ├──────────────┬────────────────────┬──────────────────────┤
+///   │  LEFT-FRONT  │    CAMERA FEED     │   RIGHT-FRONT        │
+///   │  ┌────────┐  │  ┌──────────────┐  │  ┌────────────────┐  │
+///   │  │ model  │  │  │              │  │  │     model      │  │
+///   │  │ 45°L   │  │  │ [placeholder]│  │  │     45°R       │  │
+///   │  └────────┘  │  └──────────────┘  │  └────────────────┘  │
+///   │  Body: OK    │                    │  Hands: OK           │
+///   ├──────────────┴────────────────────┴──────────────────────┤
+///   │ ● BODY: TRACKED │ HANDS: OK │ Calibrated │ Confidence   │
+///   └──────────────────────────────────────────────────────────┘
 ///
-/// 特性：
-///   - 青蓝色全息配色方案
-///   - 角落装饰支架 + 扫描线动画
-///   - 脉冲状态指示灯
-///   - 平滑跟随头部视线
-///   - 自动创建 PerEyeHand 材质并分配给手部网格
+/// Features:
+///   - Cyan holographic color scheme
+///   - Corner bracket decorations + scan line animation
+///   - Pulsing status indicators
+///   - Smooth head-follow positioning
+///   - Two 3D model viewports showing real-time body tracking
 /// </summary>
 public class IronManHUD : MonoBehaviour
 {
@@ -31,29 +31,27 @@ public class IronManHUD : MonoBehaviour
     //                   Inspector
     // ══════════════════════════════════════════════════
 
-    [Header("引用")]
+    [Header("References")]
     [SerializeField] private TeleopManager teleopManager;
+    [SerializeField] private HumanoidModelViewer modelViewer;
 
-    [Header("HUD 设置")]
-    [Tooltip("HUD 距头部距离 (m)")]
+    [Header("HUD Settings")]
+    [Tooltip("HUD distance from head (m)")]
     [SerializeField] private float hudDistance = 1.2f;
-    [Tooltip("跟随平滑速度")]
+    [Tooltip("Follow smoothing speed")]
     [SerializeField] private float followSmoothSpeed = 3f;
 
     // ══════════════════════════════════════════════════
-    //                    颜色方案
+    //                    Color Scheme
     // ══════════════════════════════════════════════════
 
-    // 主色调
     private static readonly Color CYAN          = new Color(0.00f, 1.00f, 1.00f, 1.0f);
     private static readonly Color CYAN_DIM      = new Color(0.00f, 0.75f, 0.90f, 0.6f);
-    private static readonly Color BLUE          = new Color(0.00f, 0.50f, 1.00f, 1.0f);
-    private static readonly Color GOLD          = new Color(1.00f, 0.85f, 0.00f, 1.0f);
     private static readonly Color GREEN         = new Color(0.00f, 1.00f, 0.50f, 1.0f);
     private static readonly Color RED           = new Color(1.00f, 0.20f, 0.30f, 1.0f);
+    private static readonly Color GOLD          = new Color(1.00f, 0.85f, 0.00f, 1.0f);
     private static readonly Color WHITE_DIM     = new Color(0.85f, 0.90f, 0.95f, 0.9f);
 
-    // 背景
     private static readonly Color BG_DARK       = new Color(0.02f, 0.03f, 0.08f, 0.88f);
     private static readonly Color BG_PANEL      = new Color(0.03f, 0.05f, 0.12f, 0.80f);
     private static readonly Color BG_STATUS     = new Color(0.02f, 0.02f, 0.06f, 0.92f);
@@ -61,127 +59,76 @@ public class IronManHUD : MonoBehaviour
     private static readonly Color BORDER_BRIGHT = new Color(0.00f, 0.90f, 1.00f, 0.70f);
 
     // ══════════════════════════════════════════════════
-    //                   HUD 尺寸
+    //                   HUD Dimensions
     // ══════════════════════════════════════════════════
 
     private const float CANVAS_W = 1400f;
     private const float CANVAS_H = 820f;
-    private const float CANVAS_SCALE = 0.001f; // 1px = 1mm → 1.4m × 0.82m
+    private const float CANVAS_SCALE = 0.001f;
 
     // ══════════════════════════════════════════════════
-    //                  内部引用
+    //                  Internal Refs
     // ══════════════════════════════════════════════════
 
     private Canvas _canvas;
     private Font _font;
 
-    // UI 元素
+    // UI elements
     private Text _titleText;
     private Text _timeText;
     private Text _fpsText;
-    private Text _leftHandLabel;
-    private Text _leftHandData;
-    private Text _rightHandLabel;
-    private Text _rightHandData;
+    private Text _leftViewLabel;
+    private Text _leftViewData;
+    private Text _rightViewLabel;
+    private Text _rightViewData;
     private Text _cameraPlaceholder;
     private Text _statusText;
     private Image _scanLine;
-    private Image _rosIndicator;
-    private Image _clutchIndicator;
+    private Image _bodyIndicator;
+    private Image _handsIndicator;
 
-    // 骨骼可视化（已移除）
-    // private HandSkeletonVisualizer _leftSkeletonViz;
-    // private HandSkeletonVisualizer _rightSkeletonViz;
+    // Model view RawImages
+    private RawImage _leftViewRawImage;
+    private RawImage _rightViewRawImage;
 
-    // HUD 跟随
+    // HUD follow
     private Vector3 _targetPosition;
     private Quaternion _targetRotation;
     private bool _positionInitialized;
 
-    // FPS 计算
+    // FPS
     private float _fpsTimer;
     private int _fpsCount;
     private int _currentFps;
 
-    // 角落装饰
+    // Corner brackets
     private Image[] _cornerBrackets;
 
-    // PerEyeHand 材质
-    private Material _leftEyeMat;
-    private Material _rightEyeMat;
-
     // ══════════════════════════════════════════════════
-    //             Proxy Hand Rendering
-    // ══════════════════════════════════════════════════
-
-    // Proxy Hand 组件
-    private HandUIProxy _leftProxy;
-    private HandUIProxy _rightProxy;
-
-    // Proxy Hand 专用相机
-    private Camera _leftHandCam;
-    private Camera _rightHandCam;
-
-    // RenderTexture
-    private RenderTexture _leftHandRT;
-    private RenderTexture _rightHandRT;
-
-    // UI 显示
-    private RawImage _leftHandRawImage;
-    private RawImage _rightHandRawImage;
-
-    // Layer 设置
-    private const int LAYER_HAND_UI_LEFT = 6;   // 需要在 Unity 中手动添加
-    private const int LAYER_HAND_UI_RIGHT = 7;  // 需要在 Unity 中手动添加
-
-    // RenderTexture 尺寸
-    private const int HAND_RT_SIZE = 512;
-
-    // ══════════════════════════════════════════════════
-    //                Unity 生命周期
+    //                Unity Lifecycle
     // ══════════════════════════════════════════════════
 
     private void Start()
     {
         _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-
         BuildHUD();
-        SetupPerEyeHandMaterials();
-        
-        // 延迟创建 Proxy Hands（等待 OVRSkeleton 初始化）
-        Invoke(nameof(CreateProxyHands), 0.5f);
+
+        // Bind RenderTextures from viewer (delayed to allow initialization)
+        Invoke(nameof(BindViewerTextures), 0.5f);
     }
 
     private void Update()
     {
         UpdateHUDPosition();
         UpdateStatusBar();
-        UpdateHandPanels();
+        UpdateBodyStatus();
         UpdateScanLineAnimation();
         UpdatePulsingEffects();
         UpdateFPS();
     }
 
-    private void OnDestroy()
-    {
-        if (_leftEyeMat != null) Destroy(_leftEyeMat);
-        if (_rightEyeMat != null) Destroy(_rightEyeMat);
-        
-        // 清理 RenderTexture
-        if (_leftHandRT != null)
-        {
-            _leftHandRT.Release();
-            Destroy(_leftHandRT);
-        }
-        if (_rightHandRT != null)
-        {
-            _rightHandRT.Release();
-            Destroy(_rightHandRT);
-        }
-    }
-
     // ══════════════════════════════════════════════════
-    //                  构建 HUD
+    //                  Build HUD
     // ══════════════════════════════════════════════════
 
     private void BuildHUD()
@@ -198,107 +145,96 @@ public class IronManHUD : MonoBehaviour
         canvasRT.sizeDelta = new Vector2(CANVAS_W, CANVAS_H);
         canvasRT.localScale = Vector3.one * CANVAS_SCALE;
 
-        // ─── 主背景 ───
-        CreatePanel(canvasObj.transform, "MainBG",
-            Vector2.zero, Vector2.one, BG_DARK);
+        // ─── Main background ───
+        CreatePanel(canvasObj.transform, "MainBG", Vector2.zero, Vector2.one, BG_DARK);
 
-        // ─── 外框发光边线 ───
+        // ─── Borders ───
         CreateBorder(canvasObj.transform, "OuterBorder", BORDER_BRIGHT, 2f);
-
-        // ─── 内框线 ───
         CreateBorder(canvasObj.transform, "InnerBorder", BORDER, 1f, 4f);
 
-        // ─── 角落装饰支架 ───
+        // ─── Corner brackets ───
         CreateCornerBrackets(canvasObj.transform);
 
-        // ─── 标题栏 (顶部 6%) ───
+        // ─── Title bar (top 6%) ───
         BuildTitleBar(canvasObj.transform);
 
-        // ─── 左手面板 ───
-        BuildHandPanel(canvasObj.transform, true,
-            new Vector2(0.01f, 0.12f), new Vector2(0.20f, 0.92f));
+        // ─── Left-front model view ───
+        BuildModelViewPanel(canvasObj.transform, true,
+            new Vector2(0.01f, 0.12f), new Vector2(0.22f, 0.92f));
 
-        // ─── 摄像头区域 ───
+        // ─── Camera feed area (center) ───
         BuildCameraArea(canvasObj.transform,
-            new Vector2(0.21f, 0.12f), new Vector2(0.79f, 0.92f));
+            new Vector2(0.23f, 0.12f), new Vector2(0.77f, 0.92f));
 
-        // ─── 右手面板 ───
-        BuildHandPanel(canvasObj.transform, false,
-            new Vector2(0.80f, 0.12f), new Vector2(0.99f, 0.92f));
+        // ─── Right-front model view ───
+        BuildModelViewPanel(canvasObj.transform, false,
+            new Vector2(0.78f, 0.12f), new Vector2(0.99f, 0.92f));
 
-        // ─── 底部状态栏 ───
+        // ─── Status bar ───
         BuildStatusBar(canvasObj.transform);
 
-        // ─── 扫描线 ───
+        // ─── Scan line ───
         CreateScanLine(canvasObj.transform);
     }
 
-    // ──────────── 标题栏 ────────────
+    // ──────────── Title Bar ────────────
 
     private void BuildTitleBar(Transform parent)
     {
-        // 标题背景
         Image titleBg = CreatePanel(parent, "TitleBar",
             new Vector2(0.01f, 0.93f), new Vector2(0.99f, 0.99f),
             new Color(0.01f, 0.02f, 0.06f, 0.95f));
 
-        // 装饰横线
         CreatePanel(parent, "TitleLine",
-            new Vector2(0.01f, 0.925f), new Vector2(0.99f, 0.932f),
-            BORDER);
+            new Vector2(0.01f, 0.925f), new Vector2(0.99f, 0.932f), BORDER);
 
-        // 标题文字
         _titleText = CreateText(titleBg.transform, "Title",
             new Vector2(0.02f, 0f), new Vector2(0.65f, 1f),
             "◆  S H A D O W   M O D E",
             CYAN, 24, TextAnchor.MiddleLeft);
 
-        // FPS 显示
         _fpsText = CreateText(titleBg.transform, "FPS",
             new Vector2(0.68f, 0f), new Vector2(0.82f, 1f),
             "FPS: --", CYAN_DIM, 18, TextAnchor.MiddleRight);
 
-        // 时间
         _timeText = CreateText(titleBg.transform, "Time",
             new Vector2(0.84f, 0f), new Vector2(0.98f, 1f),
             "00:00:00", CYAN_DIM, 18, TextAnchor.MiddleRight);
     }
 
-    // ──────────── 手部面板 ────────────
+    // ──────────── Model View Panel ────────────
 
-    private void BuildHandPanel(Transform parent, bool isLeft,
+    private void BuildModelViewPanel(Transform parent, bool isLeft,
         Vector2 anchorMin, Vector2 anchorMax)
     {
         string side = isLeft ? "Left" : "Right";
 
-        // 面板背景
-        Image panelBg = CreatePanel(parent, $"{side}HandPanel",
+        Image panelBg = CreatePanel(parent, $"{side}ViewPanel",
             anchorMin, anchorMax, BG_PANEL);
 
-        // 面板边框
         CreatePanelBorder(panelBg.transform, BORDER);
 
-        // ── 标题区 ──
+        // Header
         Image headerBg = CreatePanel(panelBg.transform, "Header",
             new Vector2(0f, 0.88f), new Vector2(1f, 1f),
             new Color(0f, 0.6f, 1f, 0.15f));
 
         Text label = CreateText(headerBg.transform, "Label",
             new Vector2(0.08f, 0f), new Vector2(0.92f, 1f),
-            isLeft ? "◁  LEFT HAND" : "RIGHT HAND  ▷",
-            CYAN, 20, isLeft ? TextAnchor.MiddleLeft : TextAnchor.MiddleRight);
+            isLeft ? "◁  LEFT-FRONT" : "RIGHT-FRONT  ▷",
+            CYAN, 18, isLeft ? TextAnchor.MiddleLeft : TextAnchor.MiddleRight);
 
-        if (isLeft) _leftHandLabel = label;
-        else _rightHandLabel = label;
+        if (isLeft) _leftViewLabel = label;
+        else _rightViewLabel = label;
 
-        // ── 手部渲染区域 ──
-        Image skeletonArea = CreatePanel(panelBg.transform, "SkeletonArea",
-            new Vector2(0.05f, 0.25f), new Vector2(0.95f, 0.85f),
-            new Color(0f, 0.5f, 0.8f, 0.05f));
+        // Model render area
+        Image renderArea = CreatePanel(panelBg.transform, "RenderArea",
+            new Vector2(0.03f, 0.18f), new Vector2(0.97f, 0.86f),
+            new Color(0.02f, 0.03f, 0.08f, 0.95f));
 
-        // 手部 RawImage（用于显示 Proxy Hand 的 RenderTexture）
-        GameObject rawImgObj = new GameObject("HandRawImage");
-        rawImgObj.transform.SetParent(skeletonArea.transform, false);
+        // RawImage for RenderTexture
+        GameObject rawImgObj = new GameObject("ModelRawImage");
+        rawImgObj.transform.SetParent(renderArea.transform, false);
         RawImage rawImg = rawImgObj.AddComponent<RawImage>();
         rawImg.color = Color.white;
         rawImg.raycastTarget = false;
@@ -308,28 +244,43 @@ public class IronManHUD : MonoBehaviour
         rawRT.offsetMin = Vector2.zero;
         rawRT.offsetMax = Vector2.zero;
 
-        if (isLeft) _leftHandRawImage = rawImg;
-        else _rightHandRawImage = rawImg;
+        if (isLeft) _leftViewRawImage = rawImg;
+        else _rightViewRawImage = rawImg;
 
-        // 骨骼区域十字准星
-        CreatePanel(panelBg.transform, "CrossH",
-            new Vector2(0.1f, 0.545f), new Vector2(0.9f, 0.555f),
-            new Color(0f, 0.8f, 1f, 0.08f));
-        CreatePanel(panelBg.transform, "CrossV",
-            new Vector2(0.495f, 0.28f), new Vector2(0.505f, 0.82f),
-            new Color(0f, 0.8f, 1f, 0.08f));
+        // Render area border glow
+        CreatePanelBorder(renderArea.transform,
+            new Color(0f, 0.6f, 0.8f, 0.2f));
 
-        // ── 数据区 ──
+        // Corner tick marks on render area
+        float tick = 0.08f;
+        float thin = 0.01f;
+        Color tickColor = new Color(0f, 0.8f, 1f, 0.15f);
+        CreatePanel(renderArea.transform, "TL_H", new Vector2(0, 1 - thin), new Vector2(tick, 1), tickColor);
+        CreatePanel(renderArea.transform, "TL_V", new Vector2(0, 1 - tick), new Vector2(thin, 1), tickColor);
+        CreatePanel(renderArea.transform, "TR_H", new Vector2(1 - tick, 1 - thin), new Vector2(1, 1), tickColor);
+        CreatePanel(renderArea.transform, "TR_V", new Vector2(1 - thin, 1 - tick), new Vector2(1, 1), tickColor);
+        CreatePanel(renderArea.transform, "BL_H", new Vector2(0, 0), new Vector2(tick, thin), tickColor);
+        CreatePanel(renderArea.transform, "BL_V", new Vector2(0, 0), new Vector2(thin, tick), tickColor);
+        CreatePanel(renderArea.transform, "BR_H", new Vector2(1 - tick, 0), new Vector2(1, thin), tickColor);
+        CreatePanel(renderArea.transform, "BR_V", new Vector2(1 - thin, 0), new Vector2(1, tick), tickColor);
+
+        // Angle label
+        CreateText(renderArea.transform, "AngleLabel",
+            new Vector2(0.05f, 0.01f), new Vector2(0.95f, 0.08f),
+            isLeft ? "<color=#005577>VIEW: 45° LEFT</color>" : "<color=#005577>VIEW: 45° RIGHT</color>",
+            CYAN_DIM, 11, TextAnchor.MiddleCenter);
+
+        // Data area below render
         Text data = CreateText(panelBg.transform, "Data",
-            new Vector2(0.08f, 0.02f), new Vector2(0.92f, 0.23f),
-            "Tracking: ---\nGrip: ---\nMode: ---",
-            WHITE_DIM, 16, TextAnchor.UpperLeft);
+            new Vector2(0.08f, 0.02f), new Vector2(0.92f, 0.16f),
+            "Body: ---\nHands: ---",
+            WHITE_DIM, 14, TextAnchor.UpperLeft);
 
-        if (isLeft) _leftHandData = data;
-        else _rightHandData = data;
+        if (isLeft) _leftViewData = data;
+        else _rightViewData = data;
     }
 
-    // ──────────── 摄像头区域 ────────────
+    // ──────────── Camera Area ────────────
 
     private void BuildCameraArea(Transform parent, Vector2 anchorMin, Vector2 anchorMax)
     {
@@ -338,13 +289,12 @@ public class IronManHUD : MonoBehaviour
 
         CreatePanelBorder(camBg.transform, BORDER);
 
-        // 标题
         CreateText(camBg.transform, "CamTitle",
             new Vector2(0.05f, 0.90f), new Vector2(0.95f, 0.98f),
             "▣  CAMERA FEED",
             CYAN_DIM, 16, TextAnchor.MiddleLeft);
 
-        // 网格线（装饰）
+        // Grid lines
         for (int i = 1; i < 4; i++)
         {
             float y = i * 0.22f + 0.1f;
@@ -360,7 +310,7 @@ public class IronManHUD : MonoBehaviour
                 new Color(0f, 0.6f, 0.8f, 0.06f));
         }
 
-        // 十字准星
+        // Crosshair
         CreatePanel(camBg.transform, "CrossH",
             new Vector2(0.35f, 0.495f), new Vector2(0.65f, 0.505f),
             new Color(0f, 1f, 1f, 0.12f));
@@ -368,48 +318,36 @@ public class IronManHUD : MonoBehaviour
             new Vector2(0.498f, 0.30f), new Vector2(0.502f, 0.70f),
             new Color(0f, 1f, 1f, 0.12f));
 
-        // 占位文字
         _cameraPlaceholder = CreateText(camBg.transform, "Placeholder",
             new Vector2(0.1f, 0.2f), new Vector2(0.9f, 0.75f),
             "<color=#006688>NO SIGNAL</color>\n\n<size=14><color=#004466>Camera feed placeholder\nAwaiting connection...</color></size>",
             WHITE_DIM, 28, TextAnchor.MiddleCenter);
 
-        // 底部信息
         CreateText(camBg.transform, "CamInfo",
             new Vector2(0.05f, 0.02f), new Vector2(0.95f, 0.10f),
-            "<color=#005577>RES: --- × ---  │  CODEC: ---  │  LATENCY: ---ms</color>",
+            "<color=#005577>RES: --- x ---  |  CODEC: ---  |  LATENCY: ---ms</color>",
             CYAN_DIM, 12, TextAnchor.MiddleCenter);
     }
 
-    // ──────────── 状态栏 ────────────
+    // ──────────── Status Bar ────────────
 
     private void BuildStatusBar(Transform parent)
     {
-        // 背景
         Image statusBg = CreatePanel(parent, "StatusBar",
-            new Vector2(0.01f, 0.015f), new Vector2(0.99f, 0.105f),
-            BG_STATUS);
+            new Vector2(0.01f, 0.015f), new Vector2(0.99f, 0.105f), BG_STATUS);
 
-        // 顶部装饰线
         CreatePanel(parent, "StatusLine",
-            new Vector2(0.01f, 0.105f), new Vector2(0.99f, 0.112f),
-            BORDER);
+            new Vector2(0.01f, 0.105f), new Vector2(0.99f, 0.112f), BORDER);
 
-        // ROS 指示灯
-        _rosIndicator = CreatePanel(statusBg.transform, "RosDot",
-            new Vector2(0.015f, 0.25f), new Vector2(0.025f, 0.75f),
-            GREEN).GetComponent<Image>();
-        // 强制方形
-        var dotRT = _rosIndicator.rectTransform;
-        dotRT.anchorMin = new Vector2(0.015f, 0.25f);
-        dotRT.anchorMax = new Vector2(0.028f, 0.75f);
+        // Body tracking indicator
+        _bodyIndicator = CreatePanel(statusBg.transform, "BodyDot",
+            new Vector2(0.015f, 0.25f), new Vector2(0.028f, 0.75f), RED).GetComponent<Image>();
 
-        // Clutch 指示灯
-        _clutchIndicator = CreatePanel(statusBg.transform, "ClutchDot",
-            new Vector2(0.28f, 0.25f), new Vector2(0.293f, 0.75f),
-            RED).GetComponent<Image>();
+        // Hands tracking indicator
+        _handsIndicator = CreatePanel(statusBg.transform, "HandsDot",
+            new Vector2(0.28f, 0.25f), new Vector2(0.293f, 0.75f), RED).GetComponent<Image>();
 
-        // 状态文字
+        // Status text
         _statusText = CreateText(statusBg.transform, "StatusText",
             new Vector2(0.03f, 0.05f), new Vector2(0.97f, 0.95f),
             "INITIALIZING...",
@@ -417,16 +355,15 @@ public class IronManHUD : MonoBehaviour
     }
 
     // ══════════════════════════════════════════════════
-    //                  装饰元素
+    //                  Decorations
     // ══════════════════════════════════════════════════
 
     private void CreateCornerBrackets(Transform parent)
     {
-        _cornerBrackets = new Image[8]; // 4 角 × 2 线
-        float size = 40f / CANVAS_W;   // 40px 长度
-        float thick = 3f / CANVAS_H;   // 3px 粗
+        _cornerBrackets = new Image[8];
+        float size = 40f / CANVAS_W;
+        float thick = 3f / CANVAS_H;
 
-        // 左上角
         _cornerBrackets[0] = CreatePanel(parent, "BracketTL_H",
             new Vector2(0.005f, 1f - 0.005f - thick),
             new Vector2(0.005f + size, 1f - 0.005f), CYAN).GetComponent<Image>();
@@ -434,7 +371,6 @@ public class IronManHUD : MonoBehaviour
             new Vector2(0.005f, 1f - 0.005f - size),
             new Vector2(0.005f + thick * (CANVAS_H / CANVAS_W), 1f - 0.005f), CYAN).GetComponent<Image>();
 
-        // 右上角
         _cornerBrackets[2] = CreatePanel(parent, "BracketTR_H",
             new Vector2(1f - 0.005f - size, 1f - 0.005f - thick),
             new Vector2(1f - 0.005f, 1f - 0.005f), CYAN).GetComponent<Image>();
@@ -442,7 +378,6 @@ public class IronManHUD : MonoBehaviour
             new Vector2(1f - 0.005f - thick * (CANVAS_H / CANVAS_W), 1f - 0.005f - size),
             new Vector2(1f - 0.005f, 1f - 0.005f), CYAN).GetComponent<Image>();
 
-        // 左下角
         _cornerBrackets[4] = CreatePanel(parent, "BracketBL_H",
             new Vector2(0.005f, 0.005f),
             new Vector2(0.005f + size, 0.005f + thick), CYAN).GetComponent<Image>();
@@ -450,7 +385,6 @@ public class IronManHUD : MonoBehaviour
             new Vector2(0.005f, 0.005f),
             new Vector2(0.005f + thick * (CANVAS_H / CANVAS_W), 0.005f + size), CYAN).GetComponent<Image>();
 
-        // 右下角
         _cornerBrackets[6] = CreatePanel(parent, "BracketBR_H",
             new Vector2(1f - 0.005f - size, 0.005f),
             new Vector2(1f - 0.005f, 0.005f + thick), CYAN).GetComponent<Image>();
@@ -473,23 +407,15 @@ public class IronManHUD : MonoBehaviour
         float tx = thickness / CANVAS_W;
         float ty = thickness / CANVAS_H;
 
-        // Top
-        CreatePanel(parent, $"{name}_T",
-            new Vector2(ix, 1f - iy - ty), new Vector2(1f - ix, 1f - iy), color);
-        // Bottom
-        CreatePanel(parent, $"{name}_B",
-            new Vector2(ix, iy), new Vector2(1f - ix, iy + ty), color);
-        // Left
-        CreatePanel(parent, $"{name}_L",
-            new Vector2(ix, iy), new Vector2(ix + tx, 1f - iy), color);
-        // Right
-        CreatePanel(parent, $"{name}_R",
-            new Vector2(1f - ix - tx, iy), new Vector2(1f - ix, 1f - iy), color);
+        CreatePanel(parent, $"{name}_T", new Vector2(ix, 1f - iy - ty), new Vector2(1f - ix, 1f - iy), color);
+        CreatePanel(parent, $"{name}_B", new Vector2(ix, iy), new Vector2(1f - ix, iy + ty), color);
+        CreatePanel(parent, $"{name}_L", new Vector2(ix, iy), new Vector2(ix + tx, 1f - iy), color);
+        CreatePanel(parent, $"{name}_R", new Vector2(1f - ix - tx, iy), new Vector2(1f - ix, 1f - iy), color);
     }
 
     private void CreatePanelBorder(Transform parent, Color color)
     {
-        float t = 1f / 200f; // 1px 边框
+        float t = 1f / 200f;
         CreatePanel(parent, "Border_T", new Vector2(0, 1 - t), Vector2.one, color);
         CreatePanel(parent, "Border_B", Vector2.zero, new Vector2(1, t), color);
         CreatePanel(parent, "Border_L", Vector2.zero, new Vector2(t, 1), color);
@@ -497,234 +423,35 @@ public class IronManHUD : MonoBehaviour
     }
 
     // ══════════════════════════════════════════════════
-    //              Proxy Hand 系统
+    //          Viewer Texture Binding
     // ══════════════════════════════════════════════════
 
-    /// <summary>
-    /// 创建代理手渲染系统
-    /// </summary>
-    private void CreateProxyHands()
+    private void BindViewerTextures()
     {
-        if (teleopManager == null || teleopManager.HandController == null)
+        if (modelViewer == null)
         {
-            Debug.LogWarning("[IronManHUD] TeleopManager or HandController not available, retrying...");
-            Invoke(nameof(CreateProxyHands), 0.5f);
+            Debug.LogWarning("[IronManHUD] HumanoidModelViewer not assigned, retrying...");
+            Invoke(nameof(BindViewerTextures), 0.5f);
             return;
         }
 
-        var handController = teleopManager.HandController;
-
-        // 创建 RenderTextures
-        _leftHandRT = new RenderTexture(HAND_RT_SIZE, HAND_RT_SIZE, 16, RenderTextureFormat.ARGB32);
-        _leftHandRT.name = "LeftHandRT";
-        _leftHandRT.Create();
-
-        _rightHandRT = new RenderTexture(HAND_RT_SIZE, HAND_RT_SIZE, 16, RenderTextureFormat.ARGB32);
-        _rightHandRT.name = "RightHandRT";
-        _rightHandRT.Create();
-
-        // 绑定 RenderTexture 到 RawImage
-        if (_leftHandRawImage != null)
-            _leftHandRawImage.texture = _leftHandRT;
-        if (_rightHandRawImage != null)
-            _rightHandRawImage.texture = _rightHandRT;
-
-        // 创建左手 Proxy
-        CreateSingleProxyHand(true, handController);
-
-        // 创建右手 Proxy
-        CreateSingleProxyHand(false, handController);
-
-        Debug.Log("[IronManHUD] Proxy hand system initialized");
-    }
-
-    private void CreateSingleProxyHand(bool isLeft, HandTrackingController handController)
-    {
-        string side = isLeft ? "Left" : "Right";
-        int layer = isLeft ? LAYER_HAND_UI_LEFT : LAYER_HAND_UI_RIGHT;
-        RenderTexture rt = isLeft ? _leftHandRT : _rightHandRT;
-
-        // 获取源骨骼
-        OVRSkeleton sourceSkeleton = handController.GetSkeleton(isLeft);
-        if (sourceSkeleton == null)
+        if (!modelViewer.IsInitialized)
         {
-            Debug.LogWarning($"[IronManHUD] {side} OVRSkeleton not found");
+            Invoke(nameof(BindViewerTextures), 0.5f);
             return;
         }
 
-        // 创建 Proxy 容器
-        GameObject proxyContainer = new GameObject($"{side}HandProxyContainer");
-        proxyContainer.transform.SetParent(transform, false);
-        proxyContainer.transform.localPosition = new Vector3(isLeft ? -2f : 2f, 0f, 5f);
-        proxyContainer.transform.localRotation = Quaternion.Euler(0f, isLeft ? 45f : -45f, 0f);
+        if (_leftViewRawImage != null && modelViewer.LeftRenderTexture != null)
+            _leftViewRawImage.texture = modelViewer.LeftRenderTexture;
 
-        // 添加 HandUIProxy 组件
-        HandUIProxy proxy = proxyContainer.AddComponent<HandUIProxy>();
-        proxy.SetSource(sourceSkeleton, handController.GetMesh(isLeft));
-        proxy.SetLayer(layer);
+        if (_rightViewRawImage != null && modelViewer.RightRenderTexture != null)
+            _rightViewRawImage.texture = modelViewer.RightRenderTexture;
 
-        // 创建材质（半透明全息效果）
-        Material proxyMat = CreateProxyHandMaterial(isLeft);
-        proxy.SetMaterial(proxyMat);
-
-        if (isLeft) _leftProxy = proxy;
-        else _rightProxy = proxy;
-
-        // 创建专用相机
-        CreateProxyCamera(isLeft, proxyContainer.transform, rt, layer);
-    }
-
-    private Material CreateProxyHandMaterial(bool isLeft)
-    {
-        // 尝试使用 PerEyeHand shader
-        Shader shader = Shader.Find("Custom/PerEyeHand");
-        if (shader == null)
-        {
-            // 退回到标准 Unlit
-            shader = Shader.Find("Universal Render Pipeline/Unlit");
-        }
-        if (shader == null)
-        {
-            shader = Shader.Find("Unlit/Color");
-        }
-
-        Material mat = new Material(shader);
-        mat.name = isLeft ? "LeftProxyHand_Mat" : "RightProxyHand_Mat";
-
-        // 设置颜色
-        Color handColor = new Color(0.3f, 0.8f, 1f, 0.5f); // 青色半透明
-        if (mat.HasProperty("_BaseColor"))
-            mat.SetColor("_BaseColor", handColor);
-        else if (mat.HasProperty("_Color"))
-            mat.SetColor("_Color", handColor);
-
-        // PerEyeHand 特有属性
-        if (mat.HasProperty("_FresnelPower"))
-        {
-            mat.SetFloat("_FresnelPower", 2.5f);
-            mat.SetColor("_FresnelColor", new Color(0f, 1f, 1f, 0.9f));
-        }
-
-        // 设置渲染队列为透明
-        mat.renderQueue = 3000;
-
-        return mat;
-    }
-
-    private void CreateProxyCamera(bool isLeft, Transform proxyContainer, RenderTexture rt, int layer)
-    {
-        string side = isLeft ? "Left" : "Right";
-
-        GameObject camObj = new GameObject($"{side}HandCamera");
-        camObj.transform.SetParent(proxyContainer, false);
-        camObj.transform.localPosition = new Vector3(0f, 0.1f, -0.4f);
-        camObj.transform.localRotation = Quaternion.Euler(15f, 0f, 0f);
-
-        Camera cam = camObj.AddComponent<Camera>();
-        cam.clearFlags = CameraClearFlags.SolidColor;
-        cam.backgroundColor = new Color(0f, 0f, 0f, 0f); // 透明背景
-        cam.cullingMask = 1 << layer; // 只渲染对应 Layer
-        cam.orthographic = true;
-        cam.orthographicSize = 0.15f;
-        cam.nearClipPlane = 0.01f;
-        cam.farClipPlane = 2f;
-        cam.targetTexture = rt;
-        cam.depth = -10; // 比主相机低
-
-        // 禁用音频监听
-        AudioListener listener = camObj.GetComponent<AudioListener>();
-        if (listener != null) Destroy(listener);
-
-        if (isLeft) _leftHandCam = cam;
-        else _rightHandCam = cam;
-
-        Debug.Log($"[IronManHUD] {side} proxy camera created, culling mask: {cam.cullingMask}");
+        Debug.Log("[IronManHUD] Viewer textures bound to HUD");
     }
 
     // ══════════════════════════════════════════════════
-    //          PerEyeHand 材质创建与分配
-    // ══════════════════════════════════════════════════
-
-    private void SetupPerEyeHandMaterials()
-    {
-        Shader perEyeShader = Shader.Find("Custom/PerEyeHand");
-        if (perEyeShader == null)
-        {
-            Debug.LogWarning("[IronManHUD] PerEyeHand shader 未找到，跳过手部材质设置");
-            return;
-        }
-
-        // 左眼材质
-        _leftEyeMat = new Material(perEyeShader);
-        _leftEyeMat.name = "LeftEyeHand_Runtime";
-        _leftEyeMat.SetColor("_BaseColor", new Color(0.5f, 0.8f, 1f, 0.3f));
-        _leftEyeMat.SetFloat("_TargetEye", 0f); // 左眼
-        _leftEyeMat.SetFloat("_FresnelPower", 2.5f);
-        _leftEyeMat.SetColor("_FresnelColor", new Color(0f, 0.9f, 1f, 0.8f));
-        _leftEyeMat.renderQueue = 3000;
-
-        // 右眼材质
-        _rightEyeMat = new Material(perEyeShader);
-        _rightEyeMat.name = "RightEyeHand_Runtime";
-        _rightEyeMat.SetColor("_BaseColor", new Color(0.5f, 0.8f, 1f, 0.3f));
-        _rightEyeMat.SetFloat("_TargetEye", 1f); // 右眼
-        _rightEyeMat.SetFloat("_FresnelPower", 2.5f);
-        _rightEyeMat.SetColor("_FresnelColor", new Color(0f, 0.9f, 1f, 0.8f));
-        _rightEyeMat.renderQueue = 3000;
-
-        // 查找场景中的手部追踪对象并分配材质
-        AssignHandMaterials();
-    }
-
-    private void AssignHandMaterials()
-    {
-        // 查找 LeftHandTracking 和 RightHandTracking
-        string[] leftNames = { "LeftHandTracking", "LeftHand", "OVRLeftHand" };
-        string[] rightNames = { "RightHandTracking", "RightHand", "OVRRightHand" };
-
-        foreach (string name in leftNames)
-        {
-            GameObject obj = GameObject.Find(name);
-            if (obj != null)
-            {
-                ApplyMaterialToRenderers(obj, _leftEyeMat);
-                Debug.Log($"[IronManHUD] PerEyeHand (左眼) 材质已分配到 {name}");
-                break;
-            }
-        }
-
-        foreach (string name in rightNames)
-        {
-            GameObject obj = GameObject.Find(name);
-            if (obj != null)
-            {
-                ApplyMaterialToRenderers(obj, _rightEyeMat);
-                Debug.Log($"[IronManHUD] PerEyeHand (右眼) 材质已分配到 {name}");
-                break;
-            }
-        }
-    }
-
-    private void ApplyMaterialToRenderers(GameObject root, Material mat)
-    {
-        // OVRMeshRenderer / SkinnedMeshRenderer
-        foreach (var smr in root.GetComponentsInChildren<SkinnedMeshRenderer>(true))
-        {
-            Material[] mats = smr.materials;
-            for (int i = 0; i < mats.Length; i++) mats[i] = mat;
-            smr.materials = mats;
-        }
-
-        foreach (var mr in root.GetComponentsInChildren<MeshRenderer>(true))
-        {
-            Material[] mats = mr.materials;
-            for (int i = 0; i < mats.Length; i++) mats[i] = mat;
-            mr.materials = mats;
-        }
-    }
-
-    // ══════════════════════════════════════════════════
-    //               HUD 位置跟随
+    //               HUD Position Follow
     // ══════════════════════════════════════════════════
 
     private void UpdateHUDPosition()
@@ -734,9 +461,8 @@ public class IronManHUD : MonoBehaviour
         Transform eye = teleopManager.CameraRig.centerEyeAnchor;
         if (eye == null) return;
 
-        // 目标位置：正前方 hudDistance 处
         Vector3 forward = eye.forward;
-        forward.y *= 0.3f; // 减弱俯仰影响
+        forward.y *= 0.3f;
         if (forward.sqrMagnitude < 0.001f) forward = Vector3.forward;
         forward.Normalize();
 
@@ -753,156 +479,146 @@ public class IronManHUD : MonoBehaviour
         }
         else
         {
-            // 平滑阻尼跟随
             float t = followSmoothSpeed * Time.deltaTime;
             _targetPosition = Vector3.Lerp(_targetPosition, targetPos, t);
             _targetRotation = Quaternion.Slerp(_targetRotation, targetRot, t);
             _canvas.transform.position = _targetPosition;
             _canvas.transform.rotation = _targetRotation;
         }
-
-        // 更新骨骼可视化器位置
-        UpdateSkeletonPositions();
-    }
-
-    private void UpdateSkeletonPositions()
-    {
-        if (_canvas == null) return;
-
-        Transform canvasT = _canvas.transform;
-        RectTransform canvasRT = _canvas.GetComponent<RectTransform>();
-
-        // 骨骼可视化已移除
     }
 
     // ══════════════════════════════════════════════════
-    //                 状态更新
+    //                 Status Updates
     // ══════════════════════════════════════════════════
 
     private void UpdateStatusBar()
     {
         if (_statusText == null || teleopManager == null) return;
 
-        var ros = teleopManager.RosBridge;
-        var hand = teleopManager.HandController;
+        var body = teleopManager.BodyTracker;
+        var normalizer = teleopManager.Normalizer;
 
-        // ─── ROS 连接 ───
-        string rosState, rosColor;
-        if (ros != null && ros.IsConnected)
+        // ─── Body tracking ───
+        string bodyState, bodyColor;
+        if (body != null && body.IsBodyTracking)
         {
-            rosState = "CONNECTED";
-            rosColor = "#00FF80";
-            if (_rosIndicator != null) _rosIndicator.color = GREEN;
-        }
-        else if (ros != null && ros.State == ROSBridgeConnection.ConnectionState.Connecting)
-        {
-            rosState = "CONNECTING...";
-            rosColor = "#FFDD00";
-            if (_rosIndicator != null) _rosIndicator.color = GOLD;
-        }
-        else if (ros != null && ros.State == ROSBridgeConnection.ConnectionState.Reconnecting)
-        {
-            rosState = $"RECONNECTING ({ros.ReconnectAttempts})";
-            rosColor = "#FFAA00";
-            if (_rosIndicator != null) _rosIndicator.color = GOLD;
-        }
-        else if (ros != null && ros.State == ROSBridgeConnection.ConnectionState.Error)
-        {
-            rosState = "ERROR";
-            rosColor = "#FF3344";
-            if (_rosIndicator != null) _rosIndicator.color = RED;
+            bodyState = "TRACKED";
+            bodyColor = "#00FF80";
+            if (_bodyIndicator != null) _bodyIndicator.color = GREEN;
         }
         else
         {
-            rosState = "OFFLINE";
-            rosColor = "#FF4466";
-            if (_rosIndicator != null) _rosIndicator.color = RED;
+            bodyState = "NOT TRACKED";
+            bodyColor = "#FF4466";
+            if (_bodyIndicator != null) _bodyIndicator.color = RED;
         }
 
-        // ─── Clutch ───
-        string clutchState, clutchColor;
-        if (teleopManager.ClutchEngaged)
+        // ─── Hand tracking ───
+        string handsState, handsColor;
+        bool leftHand = body != null && body.IsLeftHandTracking;
+        bool rightHand = body != null && body.IsRightHandTracking;
+        if (leftHand && rightHand)
         {
-            clutchState = "ENGAGED";
-            clutchColor = "#00FF80";
-            if (_clutchIndicator != null) _clutchIndicator.color = GREEN;
+            handsState = "BOTH OK";
+            handsColor = "#00FF80";
+            if (_handsIndicator != null) _handsIndicator.color = GREEN;
+        }
+        else if (leftHand || rightHand)
+        {
+            handsState = leftHand ? "LEFT ONLY" : "RIGHT ONLY";
+            handsColor = "#FFDD00";
+            if (_handsIndicator != null) _handsIndicator.color = GOLD;
         }
         else
         {
-            clutchState = "DISENGAGED";
-            clutchColor = "#FF4466";
-            if (_clutchIndicator != null) _clutchIndicator.color = RED;
+            handsState = "NONE";
+            handsColor = "#FF4466";
+            if (_handsIndicator != null) _handsIndicator.color = RED;
         }
 
-        // ─── 输入模式 ───
-        string inputMode = hand != null ? hand.CurrentMode.ToString().ToUpper() : "N/A";
+        // ─── Calibration ───
+        string calState, calColor;
+        if (normalizer != null && normalizer.IsCalibrated)
+        {
+            calState = "YES";
+            calColor = "#00FF80";
+        }
+        else
+        {
+            calState = "NO";
+            calColor = "#FF4466";
+        }
 
-        // ─── 组装 ───
-        float uptime = ros != null ? ros.Uptime : 0f;
-        string uptimeStr = uptime > 0 ? $"{uptime:F0}s" : "---";
+        // ─── Confidence ───
+        string confStr = "---";
+        string confColor = "#00CCFF";
+        if (body != null && body.IsBodyTracking)
+        {
+            float conf = body.BodyConfidence;
+            confStr = $"{conf:P0}";
+            confColor = conf >= 0.8f ? "#00FF80" : conf >= 0.5f ? "#FFDD00" : "#FF4466";
+        }
+
+        // ─── Bones ───
+        int boneCount = body != null ? body.BodyBoneCount : 0;
 
         _statusText.text =
-            $"  <color={rosColor}>●</color> ROS: <color={rosColor}>{rosState}</color>" +
-            $"    │    <color={clutchColor}>⚡</color> CLUTCH: <color={clutchColor}>{clutchState}</color>" +
-            $"    │    ↗ <color=#00CCFF>{teleopManager.SendRate:F0}Hz</color>" +
-            $"    │    SCALE: <color=#00CCFF>{teleopManager.PositionScale:F1}x</color>" +
-            $"    │    MODE: <color=#00CCFF>{inputMode}</color>" +
-            $"    │    UPTIME: <color=#00CCFF>{uptimeStr}</color>";
+            $"  <color={bodyColor}>●</color> BODY: <color={bodyColor}>{bodyState}</color>" +
+            $"    |    <color={handsColor}>●</color> HANDS: <color={handsColor}>{handsState}</color>" +
+            $"    |    CALIBRATED: <color={calColor}>{calState}</color>" +
+            $"    |    CONFIDENCE: <color={confColor}>{confStr}</color>" +
+            $"    |    BONES: <color=#00CCFF>{boneCount}</color>";
 
-        // 时间
         if (_timeText != null)
             _timeText.text = System.DateTime.Now.ToString("HH:mm:ss");
     }
 
-    private void UpdateHandPanels()
+    private void UpdateBodyStatus()
     {
-        if (teleopManager == null || teleopManager.HandController == null) return;
-        var hand = teleopManager.HandController;
+        if (teleopManager == null) return;
 
-        // 左手
-        if (_leftHandData != null)
+        var body = teleopManager.BodyTracker;
+
+        // Left panel data
+        if (_leftViewData != null)
         {
-            bool tracked = hand.IsLeftHandTracking;
-            bool active = hand.IsLeftInputActive;
-            string tColor = tracked ? "#00FF80" : "#FF4466";
-            string aColor = active ? "#00FF80" : "#FF4466";
+            bool bodyOk = body != null && body.IsBodyTracking;
+            bool leftOk = body != null && body.IsLeftHandTracking;
+            string bColor = bodyOk ? "#00FF80" : "#FF4466";
+            string lColor = leftOk ? "#00FF80" : "#FF4466";
 
-            _leftHandData.text =
-                $"<color={tColor}>● TRACK: {(tracked ? "OK" : "LOST")}</color>\n" +
-                $"<color={aColor}>● ACTIVE: {(active ? "YES" : "NO")}</color>\n" +
-                $"<color=#00CCFF>GRIP: {hand.LeftGripperValue:F2}</color>";
+            _leftViewData.text =
+                $"<color={bColor}>● BODY: {(bodyOk ? "OK" : "LOST")}</color>\n" +
+                $"<color={lColor}>● L.HAND: {(leftOk ? "OK" : "---")}</color>";
         }
 
-        // 右手
-        if (_rightHandData != null)
+        // Right panel data
+        if (_rightViewData != null)
         {
-            bool tracked = hand.IsRightHandTracking;
-            bool active = hand.IsRightInputActive;
-            string tColor = tracked ? "#00FF80" : "#FF4466";
-            string aColor = active ? "#00FF80" : "#FF4466";
+            bool bodyOk = body != null && body.IsBodyTracking;
+            bool rightOk = body != null && body.IsRightHandTracking;
+            string bColor = bodyOk ? "#00FF80" : "#FF4466";
+            string rColor = rightOk ? "#00FF80" : "#FF4466";
 
-            _rightHandData.text =
-                $"<color={tColor}>● TRACK: {(tracked ? "OK" : "LOST")}</color>\n" +
-                $"<color={aColor}>● ACTIVE: {(active ? "YES" : "NO")}</color>\n" +
-                $"<color=#00CCFF>GRIP: {hand.RightGripperValue:F2}</color>";
+            _rightViewData.text =
+                $"<color={bColor}>● BODY: {(bodyOk ? "OK" : "LOST")}</color>\n" +
+                $"<color={rColor}>● R.HAND: {(rightOk ? "OK" : "---")}</color>";
         }
     }
 
     // ══════════════════════════════════════════════════
-    //                动画效果
+    //                Animations
     // ══════════════════════════════════════════════════
 
     private void UpdateScanLineAnimation()
     {
         if (_scanLine == null) return;
 
-        // 扫描线从上到下缓慢移动
         float y = Mathf.Repeat(Time.time * 0.06f, 1.2f) - 0.1f;
         var rt = _scanLine.rectTransform;
         rt.anchorMin = new Vector2(0.01f, y);
         rt.anchorMax = new Vector2(0.99f, y + 0.005f);
 
-        // 靠近边缘时淡出
         float alpha = 1f - Mathf.Abs(y - 0.5f) * 2f;
         alpha = Mathf.Clamp01(alpha) * 0.10f;
         _scanLine.color = new Color(0f, 1f, 1f, alpha);
@@ -912,7 +628,6 @@ public class IronManHUD : MonoBehaviour
     {
         if (_cornerBrackets == null) return;
 
-        // 角落支架微弱脉冲
         float pulse = 0.7f + 0.3f * Mathf.Sin(Time.time * 1.5f);
         Color bracketColor = CYAN * new Color(1, 1, 1, pulse);
         foreach (var bracket in _cornerBrackets)
@@ -920,7 +635,6 @@ public class IronManHUD : MonoBehaviour
             if (bracket != null) bracket.color = bracketColor;
         }
 
-        // 标题文字呼吸效果
         if (_titleText != null)
         {
             float titlePulse = 0.85f + 0.15f * Mathf.Sin(Time.time * 0.8f);
@@ -948,7 +662,7 @@ public class IronManHUD : MonoBehaviour
     }
 
     // ══════════════════════════════════════════════════
-    //                  UI 工具方法
+    //                  UI Utilities
     // ══════════════════════════════════════════════════
 
     private Image CreatePanel(Transform parent, string name,
@@ -991,4 +705,3 @@ public class IronManHUD : MonoBehaviour
         return txt;
     }
 }
-
