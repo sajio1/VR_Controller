@@ -50,6 +50,7 @@ public class ROSBridgeConnection : MonoBehaviour
 
     [Header("SMPL 话题")]
     [SerializeField] private string smplPoseTopic = "/quest3/smpl_pose";
+    [SerializeField] private string smplxFullPoseTopic = "/quest3/smplx_pose_full";
 
     [Header("连接设置")]
     [Tooltip("重连基础间隔（秒），指数退避 ×1.5")]
@@ -135,6 +136,7 @@ public class ROSBridgeConnection : MonoBehaviour
     private bool _leftPoseAdvertised;
     private bool _leftGripperAdvertised;
     private bool _smplPoseAdvertised;
+    private bool _smplxFullPoseAdvertised;
 
     // 重连
     private bool _shouldReconnect;
@@ -305,6 +307,75 @@ public class ROSBridgeConnection : MonoBehaviour
         _sendQueue.Enqueue(_jsonBuilder.ToString());
     }
 
+    /// <summary>
+    /// Publishes full SMPL-X payload with NPZ-compatible keys.
+    /// Topic type: std_msgs/String, msg.data is a compact JSON string.
+    /// </summary>
+    public void PublishSMPLXFullPose(
+        float[] poses165,
+        float[] trans3,
+        float[] rootOrient3,
+        float[] poseBody63,
+        float[] poseHand90,
+        float[] poseJaw3,
+        float[] poseEye6,
+        float[] betas10,
+        double timestamp)
+    {
+        if (State != ConnectionState.Connected) return;
+        if (poses165 == null || poses165.Length != 165) return;
+        if (trans3 == null || trans3.Length != 3) return;
+        if (rootOrient3 == null || rootOrient3.Length != 3) return;
+        if (poseBody63 == null || poseBody63.Length != 63) return;
+        if (poseHand90 == null || poseHand90.Length != 90) return;
+        if (poseJaw3 == null || poseJaw3.Length != 3) return;
+        if (poseEye6 == null || poseEye6.Length != 6) return;
+        if (betas10 == null || betas10.Length != 10) return;
+
+        EnsureAdvertised(ref _smplxFullPoseAdvertised, smplxFullPoseTopic, "std_msgs/String");
+        EnqueueSMPLXFullPoseMessage(
+            poses165, trans3, rootOrient3, poseBody63, poseHand90, poseJaw3, poseEye6, betas10, timestamp);
+    }
+
+    private void EnqueueSMPLXFullPoseMessage(
+        float[] poses165,
+        float[] trans3,
+        float[] rootOrient3,
+        float[] poseBody63,
+        float[] poseHand90,
+        float[] poseJaw3,
+        float[] poseEye6,
+        float[] betas10,
+        double timestamp)
+    {
+        _jsonBuilder.Clear();
+        _jsonBuilder.Append("{\"op\":\"publish\",\"topic\":\"").Append(smplxFullPoseTopic);
+        _jsonBuilder.Append("\",\"msg\":{\"data\":\"");
+
+        _jsonBuilder.Append("{\\\"timestamp\\\":").Append(timestamp.ToString("F6"));
+        AppendEscapedFloatArray("poses", poses165);
+        AppendEscapedFloatArray("trans", trans3);
+        AppendEscapedFloatArray("betas", betas10);
+        AppendEscapedFloatArray("root_orient", rootOrient3);
+        AppendEscapedFloatArray("pose_body", poseBody63);
+        AppendEscapedFloatArray("pose_hand", poseHand90);
+        AppendEscapedFloatArray("pose_jaw", poseJaw3);
+        AppendEscapedFloatArray("pose_eye", poseEye6);
+        _jsonBuilder.Append("}\"}}");
+        _sendQueue.Enqueue(_jsonBuilder.ToString());
+    }
+
+    private void AppendEscapedFloatArray(string key, float[] data)
+    {
+        _jsonBuilder.Append(",\\\"").Append(key).Append("\\\":[");
+        for (int i = 0; i < data.Length; i++)
+        {
+            if (i > 0) _jsonBuilder.Append(",");
+            _jsonBuilder.Append(data[i].ToString("F6"));
+        }
+        _jsonBuilder.Append("]");
+    }
+
     // ══════════════════════════════════════════════════
     //           向后兼容接口（映射到右手）
     // ══════════════════════════════════════════════════
@@ -339,6 +410,7 @@ public class ROSBridgeConnection : MonoBehaviour
         Unadv(leftPoseTopic);
         Unadv(leftGripperTopic);
         Unadv(smplPoseTopic);
+        Unadv(smplxFullPoseTopic);
     }
 
     private void EnqueuePoseMessage(string topic, Vector3 pos, Quaternion rot, string frameId)
@@ -403,6 +475,7 @@ public class ROSBridgeConnection : MonoBehaviour
         _leftPoseAdvertised = false;
         _leftGripperAdvertised = false;
         _smplPoseAdvertised = false;
+        _smplxFullPoseAdvertised = false;
     }
 
     // ══════════════════════════════════════════════════

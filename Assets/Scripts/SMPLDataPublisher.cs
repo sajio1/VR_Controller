@@ -3,14 +3,14 @@ using UnityEngine;
 /// <summary>
 /// Publishes SMPL pose data in real-time via ROSBridgeConnection.
 ///
-/// Each frame (at the configured rate), serializes the current SMPLPose
-/// (72 axis-angle values + 3 translation values) and publishes to a
-/// ROS topic for the partner's robot arm mapping pipeline.
+/// Each frame (at the configured rate), serializes full SMPL-X data
+/// from HumanoidSMPLPoseProvider (poses165 + split fields) and publishes
+/// to ROS for real-time teleoperation.
 /// </summary>
 public class SMPLDataPublisher : MonoBehaviour
 {
     [Header("Data Source")]
-    [SerializeField] private SMPLRetargeter retargeter;
+    [SerializeField] private HumanoidSMPLPoseProvider humanoidPoseProvider;
 
     [Header("Transport")]
     [SerializeField] private ROSBridgeConnection rosConnection;
@@ -29,22 +29,37 @@ public class SMPLDataPublisher : MonoBehaviour
 
     private void Start()
     {
+        if (humanoidPoseProvider == null)
+            humanoidPoseProvider = FindAnyObjectByType<HumanoidSMPLPoseProvider>();
+        if (rosConnection == null)
+            rosConnection = FindAnyObjectByType<ROSBridgeConnection>();
         _publishInterval = publishRate > 0 ? 1f / publishRate : 0f;
     }
 
     private void LateUpdate()
     {
-        if (!publishEnabled || retargeter == null || rosConnection == null) return;
+        if (!publishEnabled || humanoidPoseProvider == null || rosConnection == null) return;
         if (!rosConnection.IsConnected) return;
 
-        var pose = retargeter.CurrentPose;
-        if (!pose.IsValid) return;
+        if (!humanoidPoseProvider.TryGetSMPLXFrame(out HumanoidSMPLPoseProvider.SMPLXFrameData frame))
+            return;
+        if (!frame.IsValid) return;
 
         if (_publishInterval > 0f && Time.time - _lastPublishTime < _publishInterval)
             return;
         _lastPublishTime = Time.time;
 
-        rosConnection.PublishSMPLPose(pose.AxisAngleData, pose.TranslationData, pose.Timestamp);
+        rosConnection.PublishSMPLXFullPose(
+            frame.FullPose165,
+            frame.Translation3,
+            frame.RootOrient3,
+            frame.PoseBody63,
+            frame.PoseHand90,
+            frame.PoseJaw3,
+            frame.PoseEye6,
+            frame.Betas10,
+            frame.Timestamp
+        );
     }
 
     public void SetEnabled(bool enabled)
