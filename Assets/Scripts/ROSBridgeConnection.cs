@@ -48,6 +48,9 @@ public class ROSBridgeConnection : MonoBehaviour
     [SerializeField] private string leftPoseTopic = "/quest3/left_hand_pose";
     [SerializeField] private string leftGripperTopic = "/quest3/left_gripper";
 
+    [Header("SMPL 话题")]
+    [SerializeField] private string smplPoseTopic = "/quest3/smpl_pose";
+
     [Header("连接设置")]
     [Tooltip("重连基础间隔（秒），指数退避 ×1.5")]
     [SerializeField] private float reconnectBaseInterval = 2.0f;
@@ -131,6 +134,7 @@ public class ROSBridgeConnection : MonoBehaviour
     private bool _rightGripperAdvertised;
     private bool _leftPoseAdvertised;
     private bool _leftGripperAdvertised;
+    private bool _smplPoseAdvertised;
 
     // 重连
     private bool _shouldReconnect;
@@ -263,6 +267,45 @@ public class ROSBridgeConnection : MonoBehaviour
     }
 
     // ══════════════════════════════════════════════════
+    //               SMPL 姿态发布接口
+    // ══════════════════════════════════════════════════
+
+    /// <summary>
+    /// Publishes full SMPL pose data: 72 axis-angle floats + 3 translation floats.
+    /// JSON format on the smpl_pose topic, compatible with std_msgs/String.
+    /// </summary>
+    public void PublishSMPLPose(float[] axisAngleData, float[] translationData, double timestamp)
+    {
+        if (State != ConnectionState.Connected) return;
+        EnsureAdvertised(ref _smplPoseAdvertised, smplPoseTopic, "std_msgs/String");
+        EnqueueSMPLPoseMessage(axisAngleData, translationData, timestamp);
+    }
+
+    private void EnqueueSMPLPoseMessage(float[] poses, float[] trans, double timestamp)
+    {
+        _jsonBuilder.Clear();
+        _jsonBuilder.Append("{\"op\":\"publish\",\"topic\":\"").Append(smplPoseTopic);
+        _jsonBuilder.Append("\",\"msg\":{\"data\":\"");
+
+        // Compact JSON payload inside the string field
+        _jsonBuilder.Append("{\\\"timestamp\\\":").Append(timestamp.ToString("F6"));
+        _jsonBuilder.Append(",\\\"poses\\\":[");
+        for (int i = 0; i < poses.Length; i++)
+        {
+            if (i > 0) _jsonBuilder.Append(",");
+            _jsonBuilder.Append(poses[i].ToString("F6"));
+        }
+        _jsonBuilder.Append("],\\\"trans\\\":[");
+        for (int i = 0; i < trans.Length; i++)
+        {
+            if (i > 0) _jsonBuilder.Append(",");
+            _jsonBuilder.Append(trans[i].ToString("F6"));
+        }
+        _jsonBuilder.Append("]}\"}}");
+        _sendQueue.Enqueue(_jsonBuilder.ToString());
+    }
+
+    // ══════════════════════════════════════════════════
     //           向后兼容接口（映射到右手）
     // ══════════════════════════════════════════════════
 
@@ -295,6 +338,7 @@ public class ROSBridgeConnection : MonoBehaviour
         Unadv(rightGripperTopic);
         Unadv(leftPoseTopic);
         Unadv(leftGripperTopic);
+        Unadv(smplPoseTopic);
     }
 
     private void EnqueuePoseMessage(string topic, Vector3 pos, Quaternion rot, string frameId)
@@ -358,6 +402,7 @@ public class ROSBridgeConnection : MonoBehaviour
         _rightGripperAdvertised = false;
         _leftPoseAdvertised = false;
         _leftGripperAdvertised = false;
+        _smplPoseAdvertised = false;
     }
 
     // ══════════════════════════════════════════════════

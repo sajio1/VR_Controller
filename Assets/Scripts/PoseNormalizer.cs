@@ -47,41 +47,43 @@ public class PoseNormalizer : MonoBehaviour
     public struct JointMapping
     {
         public SMPLJoint SmplJoint;
-        public OVRSkeleton.BoneId OvrBoneId;
+        public string[] OvrBoneNameCandidates;
 
-        public JointMapping(SMPLJoint smpl, OVRSkeleton.BoneId ovr)
+        public JointMapping(SMPLJoint smpl, params string[] candidates)
         {
             SmplJoint = smpl;
-            OvrBoneId = ovr;
+            OvrBoneNameCandidates = candidates;
         }
     }
 
+    // NOTE: This script is preserved for legacy UI compatibility.
+    // Meta XR SDK's OVRSkeleton.BoneId names vary across versions, so we map by name strings.
     private static readonly JointMapping[] _jointMap = new JointMapping[]
     {
-        new JointMapping(SMPLJoint.Pelvis,      OVRSkeleton.BoneId.Body_Hips),
-        new JointMapping(SMPLJoint.L_Hip,        OVRSkeleton.BoneId.Body_LeftUpperLeg),
-        new JointMapping(SMPLJoint.R_Hip,        OVRSkeleton.BoneId.Body_RightUpperLeg),
-        new JointMapping(SMPLJoint.Spine1,       OVRSkeleton.BoneId.Body_SpineLower),
-        new JointMapping(SMPLJoint.L_Knee,       OVRSkeleton.BoneId.Body_LeftLowerLeg),
-        new JointMapping(SMPLJoint.R_Knee,       OVRSkeleton.BoneId.Body_RightLowerLeg),
-        new JointMapping(SMPLJoint.Spine2,       OVRSkeleton.BoneId.Body_SpineMiddle),
-        new JointMapping(SMPLJoint.L_Ankle,      OVRSkeleton.BoneId.Body_LeftFootAnkle),
-        new JointMapping(SMPLJoint.R_Ankle,      OVRSkeleton.BoneId.Body_RightFootAnkle),
-        new JointMapping(SMPLJoint.Spine3,       OVRSkeleton.BoneId.Body_SpineUpper),
-        new JointMapping(SMPLJoint.L_Foot,       OVRSkeleton.BoneId.Body_LeftFootBall),
-        new JointMapping(SMPLJoint.R_Foot,       OVRSkeleton.BoneId.Body_RightFootBall),
-        new JointMapping(SMPLJoint.Neck,         OVRSkeleton.BoneId.Body_Neck),
-        new JointMapping(SMPLJoint.L_Collar,     OVRSkeleton.BoneId.Body_LeftShoulder),
-        new JointMapping(SMPLJoint.R_Collar,     OVRSkeleton.BoneId.Body_RightShoulder),
-        new JointMapping(SMPLJoint.Head,         OVRSkeleton.BoneId.Body_Head),
-        new JointMapping(SMPLJoint.L_Shoulder,   OVRSkeleton.BoneId.Body_LeftArmUpper),
-        new JointMapping(SMPLJoint.R_Shoulder,   OVRSkeleton.BoneId.Body_RightArmUpper),
-        new JointMapping(SMPLJoint.L_Elbow,      OVRSkeleton.BoneId.Body_LeftArmLower),
-        new JointMapping(SMPLJoint.R_Elbow,      OVRSkeleton.BoneId.Body_RightArmLower),
-        new JointMapping(SMPLJoint.L_Wrist,      OVRSkeleton.BoneId.Body_LeftHandWrist),
-        new JointMapping(SMPLJoint.R_Wrist,      OVRSkeleton.BoneId.Body_RightHandWrist),
-        new JointMapping(SMPLJoint.L_Hand,       OVRSkeleton.BoneId.Body_LeftHandPalm),
-        new JointMapping(SMPLJoint.R_Hand,       OVRSkeleton.BoneId.Body_RightHandPalm),
+        new JointMapping(SMPLJoint.Pelvis,      "Body_Hips", "Hips", "Pelvis"),
+        new JointMapping(SMPLJoint.L_Hip,       "Body_LeftUpperLeg", "LeftUpperLeg", "LeftHip"),
+        new JointMapping(SMPLJoint.R_Hip,       "Body_RightUpperLeg", "RightUpperLeg", "RightHip"),
+        new JointMapping(SMPLJoint.Spine1,      "Body_SpineLower", "SpineLower", "Spine1"),
+        new JointMapping(SMPLJoint.L_Knee,      "Body_LeftLowerLeg", "LeftLowerLeg", "LeftKnee"),
+        new JointMapping(SMPLJoint.R_Knee,      "Body_RightLowerLeg", "RightLowerLeg", "RightKnee"),
+        new JointMapping(SMPLJoint.Spine2,      "Body_SpineMiddle", "SpineMiddle", "Spine2"),
+        new JointMapping(SMPLJoint.L_Ankle,     "Body_LeftFootAnkle", "LeftFootAnkle", "LeftAnkle"),
+        new JointMapping(SMPLJoint.R_Ankle,     "Body_RightFootAnkle", "RightFootAnkle", "RightAnkle"),
+        new JointMapping(SMPLJoint.Spine3,      "Body_SpineUpper", "SpineUpper", "Spine3"),
+        new JointMapping(SMPLJoint.L_Foot,      "Body_LeftFootBall", "LeftFootBall", "LeftFoot"),
+        new JointMapping(SMPLJoint.R_Foot,      "Body_RightFootBall", "RightFootBall", "RightFoot"),
+        new JointMapping(SMPLJoint.Neck,        "Body_Neck", "Neck"),
+        new JointMapping(SMPLJoint.L_Collar,    "Body_LeftShoulder", "LeftShoulder", "LeftCollar"),
+        new JointMapping(SMPLJoint.R_Collar,    "Body_RightShoulder", "RightShoulder", "RightCollar"),
+        new JointMapping(SMPLJoint.Head,        "Body_Head", "Head"),
+        new JointMapping(SMPLJoint.L_Shoulder,  "Body_LeftArmUpper", "LeftArmUpper", "LeftUpperArm"),
+        new JointMapping(SMPLJoint.R_Shoulder,  "Body_RightArmUpper", "RightArmUpper", "RightUpperArm"),
+        new JointMapping(SMPLJoint.L_Elbow,     "Body_LeftArmLower", "LeftArmLower", "LeftLowerArm", "LeftElbow"),
+        new JointMapping(SMPLJoint.R_Elbow,     "Body_RightArmLower", "RightArmLower", "RightLowerArm", "RightElbow"),
+        new JointMapping(SMPLJoint.L_Wrist,     "Body_LeftHandWrist", "LeftHandWrist", "LeftWrist"),
+        new JointMapping(SMPLJoint.R_Wrist,     "Body_RightHandWrist", "RightHandWrist", "RightWrist"),
+        new JointMapping(SMPLJoint.L_Hand,      "Body_LeftHandPalm", "LeftHandPalm", "LeftPalm"),
+        new JointMapping(SMPLJoint.R_Hand,      "Body_RightHandPalm", "RightHandPalm", "RightPalm"),
     };
 
     /// <summary>Static joint hierarchy: parent index for each SMPL joint (-1 = root).</summary>
@@ -195,15 +197,15 @@ public class PoseNormalizer : MonoBehaviour
         }
 
         // Record hip height for position normalization
-        var hipsJoint = bodyTrackingManager.GetJoint(OVRSkeleton.BoneId.Body_Hips);
-        if (!hipsJoint.IsValid)
+        Vector3 hipsPos = bodyTrackingManager.GetBoneWorldPositionByNameCandidates("Body_Hips", "Hips", "Pelvis");
+        if (hipsPos.sqrMagnitude < 1e-8f)
         {
             Debug.LogWarning("[PoseNormalizer] Cannot calibrate: hips joint invalid");
             return;
         }
 
-        _calibrationHipPosition = hipsJoint.WorldPosition;
-        _calibrationHipHeight = hipsJoint.WorldPosition.y;
+        _calibrationHipPosition = hipsPos;
+        _calibrationHipHeight = hipsPos.y;
 
         if (_calibrationHipHeight > 0.1f)
         {
@@ -220,7 +222,7 @@ public class PoseNormalizer : MonoBehaviour
         for (int i = 0; i < _jointMap.Length && i < (int)SMPLJoint.Count; i++)
         {
             var mapping = _jointMap[i];
-            Quaternion localRot = bodyTrackingManager.GetBoneLocalRotation(mapping.OvrBoneId);
+            Quaternion localRot = bodyTrackingManager.GetBoneLocalRotationByNameCandidates(mapping.OvrBoneNameCandidates);
             _calibrationTPoseRotations[(int)mapping.SmplJoint] = localRot;
         }
 
@@ -251,7 +253,11 @@ public class PoseNormalizer : MonoBehaviour
             var mapping = _jointMap[i];
             int smplIdx = (int)mapping.SmplJoint;
 
-            Quaternion localRot = bodyTrackingManager.GetBoneLocalRotation(mapping.OvrBoneId);
+            Quaternion localRot = Quaternion.identity;
+            if (bodyTrackingManager != null)
+            {
+                localRot = bodyTrackingManager.GetBoneLocalRotationByNameCandidates(mapping.OvrBoneNameCandidates);
+            }
 
             if (_isCalibrated)
             {
@@ -264,11 +270,11 @@ public class PoseNormalizer : MonoBehaviour
         }
 
         // Normalize root position
-        var hips = bodyTrackingManager.GetJoint(OVRSkeleton.BoneId.Body_Hips);
-        if (hips.IsValid)
+        Vector3 rawPos = bodyTrackingManager != null
+            ? bodyTrackingManager.GetBoneWorldPositionByNameCandidates("Body_Hips", "Hips", "Pelvis")
+            : Vector3.zero;
+        if (rawPos.sqrMagnitude > 0f)
         {
-            Vector3 rawPos = hips.WorldPosition;
-
             if (_isCalibrated)
             {
                 // Position relative to calibration origin, scaled to standard model

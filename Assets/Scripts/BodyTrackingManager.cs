@@ -222,4 +222,53 @@ public class BodyTrackingManager : MonoBehaviour
 
     /// <summary>Enumerate all bone IDs and their indices.</summary>
     public IReadOnlyDictionary<OVRSkeleton.BoneId, int> BoneIdToIndex => _boneIdToIndex;
+
+    // ══════════════════════════════════════════════════
+    //              Name-based Bone Access
+    // ══════════════════════════════════════════════════
+    //
+    // Meta XR SDK's OVRSkeleton.BoneId names vary across versions.
+    // These helpers allow other scripts (legacy PoseNormalizer) to compile
+    // without depending on specific BoneId enum members.
+
+    public Transform GetBoneTransformByNameCandidates(params string[] candidates)
+    {
+        if (bodySkeleton == null || !bodySkeleton.IsInitialized) return null;
+        var bones = bodySkeleton.Bones;
+        if (bones == null) return null;
+
+        for (int c = 0; c < candidates.Length; c++)
+        {
+            string cand = candidates[c];
+            if (string.IsNullOrEmpty(cand)) continue;
+            string candLower = cand.ToLowerInvariant();
+
+            for (int i = 0; i < bones.Count; i++)
+            {
+                var b = bones[i];
+                var t = b.Transform;
+                if (t == null) continue;
+
+                if (t.name != null && t.name.ToLowerInvariant().Contains(candLower))
+                    return t;
+
+                string idStr = b.Id.ToString();
+                if (!string.IsNullOrEmpty(idStr) && idStr.ToLowerInvariant().Contains(candLower))
+                    return t;
+            }
+        }
+        return null;
+    }
+
+    public Quaternion GetBoneLocalRotationByNameCandidates(params string[] candidates)
+    {
+        var t = GetBoneTransformByNameCandidates(candidates);
+        return t != null ? t.localRotation : Quaternion.identity;
+    }
+
+    public Vector3 GetBoneWorldPositionByNameCandidates(params string[] candidates)
+    {
+        var t = GetBoneTransformByNameCandidates(candidates);
+        return t != null ? t.position : Vector3.zero;
+    }
 }

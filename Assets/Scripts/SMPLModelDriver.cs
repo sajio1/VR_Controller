@@ -1,23 +1,20 @@
 using UnityEngine;
 
 /// <summary>
-/// Drives the SMPL-H model skeleton using normalized pose data from PoseNormalizer.
+/// Drives the SMPL model skeleton using pose data from SMPLRetargeter.
 ///
 /// Supports two modes:
 ///   1. ProceduralHumanoid: drives the capsule-based placeholder model
-///   2. Imported FBX: drives an imported SMPL-H model's Transform hierarchy
+///   2. Imported FBX: drives an imported SMPL model's Transform hierarchy
 ///
-/// Each frame, reads the normalized joint rotations and root position from
-/// PoseNormalizer and applies them to the model's bone transforms.
+/// Each frame, reads the joint rotations and root position from
+/// SMPLRetargeter and applies them to the model's bone transforms
+/// with configurable smoothing.
 /// </summary>
 public class SMPLModelDriver : MonoBehaviour
 {
-    // ══════════════════════════════════════════════════
-    //                   Inspector
-    // ══════════════════════════════════════════════════
-
     [Header("Data Source")]
-    [SerializeField] private PoseNormalizer poseNormalizer;
+    [SerializeField] private SMPLRetargeter retargeter;
 
     [Header("Model")]
     [Tooltip("Procedural humanoid placeholder (auto-created if none assigned)")]
@@ -35,37 +32,29 @@ public class SMPLModelDriver : MonoBehaviour
     [Tooltip("Vertical offset for the model root")]
     [SerializeField] private float rootVerticalOffset = 0f;
 
-    // ══════════════════════════════════════════════════
-    //                  Internal State
-    // ══════════════════════════════════════════════════
-
     private Transform[] _targetJoints;
     private Quaternion[] _smoothedRotations;
     private Vector3 _smoothedRootPos;
     private bool _initialized;
 
-    // ══════════════════════════════════════════════════
-    //                  Public API
-    // ══════════════════════════════════════════════════
-
     public ProceduralHumanoid Model => proceduralModel;
     public bool IsInitialized => _initialized;
+    public float RotationSmoothSpeed
+    {
+        get => rotationSmoothSpeed;
+        set => rotationSmoothSpeed = value;
+    }
 
-    /// <summary>Initialize or re-initialize the model driver.</summary>
     public void Initialize()
     {
         if (proceduralModel == null)
-        {
             proceduralModel = gameObject.AddComponent<ProceduralHumanoid>();
-        }
 
         if (proceduralModel.JointTransforms == null || proceduralModel.JointCount == 0)
-        {
             proceduralModel.Build();
-        }
 
         _targetJoints = proceduralModel.JointTransforms;
-        int jointCount = (int)PoseNormalizer.SMPLJoint.Count;
+        int jointCount = SMPLRetargeter.JointCount;
         _smoothedRotations = new Quaternion[jointCount];
         for (int i = 0; i < jointCount; i++)
             _smoothedRotations[i] = Quaternion.identity;
@@ -78,22 +67,16 @@ public class SMPLModelDriver : MonoBehaviour
         Debug.Log("[SMPLModelDriver] Initialized");
     }
 
-    /// <summary>Set the layer for the model (for camera isolation).</summary>
     public void SetModelLayer(int layer)
     {
         if (proceduralModel != null)
             proceduralModel.SetLayer(layer);
     }
 
-    /// <summary>Get the model root transform (for camera framing).</summary>
     public Transform GetModelRoot()
     {
         return proceduralModel != null ? proceduralModel.ModelRoot : null;
     }
-
-    // ══════════════════════════════════════════════════
-    //              Unity Lifecycle
-    // ══════════════════════════════════════════════════
 
     private void Start()
     {
@@ -103,19 +86,15 @@ public class SMPLModelDriver : MonoBehaviour
 
     private void LateUpdate()
     {
-        if (!_initialized || poseNormalizer == null) return;
+        if (!_initialized || retargeter == null) return;
 
-        var pose = poseNormalizer.CurrentPose;
+        var pose = retargeter.CurrentPose;
         if (!pose.IsValid || pose.JointRotations == null) return;
 
         ApplyPose(pose);
     }
 
-    // ══════════════════════════════════════════════════
-    //              Pose Application
-    // ══════════════════════════════════════════════════
-
-    private void ApplyPose(PoseNormalizer.NormalizedPose pose)
+    private void ApplyPose(SMPLPose pose)
     {
         if (_targetJoints == null) return;
 
@@ -126,19 +105,14 @@ public class SMPLModelDriver : MonoBehaviour
         {
             if (_targetJoints[i] == null) continue;
 
-            Quaternion targetRot = pose.JointRotations[i];
-
-            // Smooth interpolation
             _smoothedRotations[i] = Quaternion.Slerp(
                 _smoothedRotations[i],
-                targetRot,
-                1f - Mathf.Exp(-rotationSmoothSpeed * dt)
-            );
+                pose.JointRotations[i],
+                1f - Mathf.Exp(-rotationSmoothSpeed * dt));
 
             _targetJoints[i].localRotation = _smoothedRotations[i];
         }
 
-        // Apply root position
         if (applyRootPosition && proceduralModel != null && proceduralModel.ModelRoot != null)
         {
             Vector3 targetPos = pose.RootPosition;
@@ -147,14 +121,11 @@ public class SMPLModelDriver : MonoBehaviour
             _smoothedRootPos = Vector3.Lerp(
                 _smoothedRootPos,
                 targetPos,
-                1f - Mathf.Exp(-positionSmoothSpeed * dt)
-            );
+                1f - Mathf.Exp(-positionSmoothSpeed * dt));
 
-            // Apply to the pelvis joint (index 0) rather than the model root,
-            // so the model root stays at origin for camera framing
             if (_targetJoints.Length > 0 && _targetJoints[0] != null)
             {
-                Vector3 restPos = ProceduralHumanoid.GetRestPosition(PoseNormalizer.SMPLJoint.Pelvis);
+                Vector3 restPos = ProceduralHumanoid.GetRestPosition(SMPLRetargeter.SMPLJoint.Pelvis);
                 _targetJoints[0].localPosition = restPos + _smoothedRootPos;
             }
         }

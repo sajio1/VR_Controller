@@ -137,7 +137,7 @@ public class ProceduralHumanoid : MonoBehaviour
         _modelRoot.transform.localPosition = Vector3.zero;
         _modelRoot.transform.localRotation = Quaternion.identity;
 
-        int jointCount = (int)PoseNormalizer.SMPLJoint.Count;
+        int jointCount = (int)SMPLRetargeter.SMPLJoint.Count;
         _jointTransforms = new Transform[jointCount];
 
         // Build joint hierarchy
@@ -163,7 +163,7 @@ public class ProceduralHumanoid : MonoBehaviour
     }
 
     /// <summary>Get the transform for a specific SMPL joint.</summary>
-    public Transform GetJointTransform(PoseNormalizer.SMPLJoint joint)
+    public Transform GetJointTransform(SMPLRetargeter.SMPLJoint joint)
     {
         int idx = (int)joint;
         if (_jointTransforms != null && idx >= 0 && idx < _jointTransforms.Length)
@@ -172,7 +172,7 @@ public class ProceduralHumanoid : MonoBehaviour
     }
 
     /// <summary>Get the rest position for a specific SMPL joint.</summary>
-    public static Vector3 GetRestPosition(PoseNormalizer.SMPLJoint joint)
+    public static Vector3 GetRestPosition(SMPLRetargeter.SMPLJoint joint)
     {
         int idx = (int)joint;
         if (idx >= 0 && idx < REST_POSITIONS.Length)
@@ -186,13 +186,13 @@ public class ProceduralHumanoid : MonoBehaviour
 
     private void BuildJointHierarchy()
     {
-        int jointCount = (int)PoseNormalizer.SMPLJoint.Count;
-        int[] parentIndices = PoseNormalizer.SmplParentIndices;
+        int jointCount = (int)SMPLRetargeter.SMPLJoint.Count;
+        int[] parentIndices = SMPLRetargeter.SmplParentIndices;
 
         // Create all joint GameObjects
         for (int i = 0; i < jointCount; i++)
         {
-            string name = ((PoseNormalizer.SMPLJoint)i).ToString();
+            string name = ((SMPLRetargeter.SMPLJoint)i).ToString();
             GameObject jointObj = new GameObject($"Joint_{name}");
             _jointTransforms[i] = jointObj.transform;
         }
@@ -265,7 +265,7 @@ public class ProceduralHumanoid : MonoBehaviour
 
     private void BuildJointVisuals()
     {
-        int jointCount = (int)PoseNormalizer.SMPLJoint.Count;
+        int jointCount = (int)SMPLRetargeter.SMPLJoint.Count;
 
         for (int i = 0; i < jointCount && i < JOINT_RADII.Length; i++)
         {
@@ -273,7 +273,7 @@ public class ProceduralHumanoid : MonoBehaviour
             if (radius <= 0) continue;
 
             GameObject sphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            sphere.name = $"JointViz_{((PoseNormalizer.SMPLJoint)i).ToString()}";
+            sphere.name = $"JointViz_{((SMPLRetargeter.SMPLJoint)i).ToString()}";
 
             var col = sphere.GetComponent<Collider>();
             if (col != null) Destroy(col);
